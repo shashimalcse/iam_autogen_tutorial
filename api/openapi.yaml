@@ -1,0 +1,289 @@
+openapi: 3.0.3
+info:
+  title: Hotel API
+  description: API for hotel booking system
+  version: 1.0.0
+servers:
+  - url: http://localhost:8001
+    description: Local development server
+
+components:
+  schemas:
+    HotelBasic:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        location:
+          type: string
+        rating:
+          type: number
+          format: float
+        amenities:
+          type: array
+          items:
+            type: string
+        policies:
+          type: array
+          items:
+            type: string
+        roomTypes:
+          type: array
+          items:
+            type: string
+        promotions:
+          type: array
+          items:
+            type: string
+
+    Hotels:
+      type: object
+      properties:
+        hotels:
+          type: array
+          items:
+            $ref: '#/components/schemas/HotelBasic'
+
+    RoomBasic:
+      type: object
+      properties:
+        id:
+          type: integer
+        room_number:
+          type: string
+        room_type:
+          type: string
+        price_per_night:
+          type: number
+          format: float
+        occupancy:
+          type: integer
+        is_available:
+          type: boolean
+
+    Hotel:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        location:
+          type: string
+        rating:
+          type: number
+          format: float
+        amenities:
+          type: array
+          items:
+            type: string
+        policies:
+          type: array
+          items:
+            type: string
+        roomTypes:
+          type: array
+          items:
+            type: string
+        promotions:
+          type: array
+          items:
+            type: string
+        rooms:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoomBasic'
+
+    BookingCreate:
+      type: object
+      properties:
+        hotel_id:
+          type: integer
+        user_id:
+          type: string
+          format: uuid
+        room_id:
+          type: integer
+        check_in:
+          type: string
+          format: date
+        check_out:
+          type: string
+          format: date
+      required:
+        - hotel_id
+        - user_id
+        - room_id
+        - check_in
+        - check_out
+
+    Booking:
+      type: object
+      properties:
+        id:
+          type: integer
+        hotel_id:
+          type: integer
+        hotel_name:
+          type: string
+        user_id:
+          type: string
+          format: uuid
+        room_id:
+          type: integer
+        room_type:
+          type: string
+        check_in:
+          type: string
+          format: date
+        check_out:
+          type: string
+          format: date
+        total_price:
+          type: number
+          format: float
+
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - BearerAuth: []
+
+paths:
+  /api/hotels:
+    get:
+      summary: List all hotels
+      operationId: listHotels
+      security:
+        - BearerAuth: ['read_hotels']
+      responses:
+        '200':
+          description: List of hotels
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Hotels'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+
+  /api/hotels/{hotel_id}:
+    get:
+      summary: Get hotel details
+      operationId: getHotel
+      security:
+        - BearerAuth: ['read_rooms']
+      parameters:
+        - name: hotel_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Hotel details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Hotel'
+        '404':
+          description: Hotel not found
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+
+
+  /api/bookings:
+    post:
+      summary: Book a room
+      operationId: bookRoom
+      security:
+        - BearerAuth: ['create_bookings']
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingCreate'
+      responses:
+        '200':
+          description: Booking created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400':
+          description: Invalid request or room not available
+        '404':
+          description: Hotel or room not found
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+
+  /api/bookings/{booking_id}:
+    get:
+      summary: Get booking details
+      operationId: getBookingDetails
+      security:
+        - BearerAuth: ['read_bookings']
+      parameters:
+        - name: booking_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Booking details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '404':
+          description: Booking not found
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+
+
+  /api/users/{user_id}/bookings:
+    get:
+      summary: Get user bookings
+      operationId: getUserBookings
+      security:
+        - BearerAuth: ['read_bookings']
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of user bookings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Booking'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+
