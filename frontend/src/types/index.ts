@@ -1,4 +1,174 @@
-// API Response Types
+// Updated types to match new API structure
+
+// === Core API Types ===
+export interface Address {
+  street: string;
+  city: string;
+  state: string;
+  country: string;
+  postal_code: string;
+}
+
+export interface PriceRange {
+  min: number;
+  max: number;
+}
+
+export interface Hotel {
+  id: number;
+  name: string;
+  brand: string;
+  description: string;
+  address: Address;
+  rating: number;
+  amenities: string[];
+  images: string[];
+  price_range: PriceRange;
+  rooms?: Room[];
+}
+
+export interface Room {
+  id: number;
+  hotel_id: number;
+  room_type: string;
+  bed_type: string;
+  max_occupancy: number;
+  size_sqft: number;
+  amenities: string[];
+  images: string[];
+  base_price: number;
+}
+
+export interface ReviewAspects {
+  cleanliness?: number;
+  service?: number;
+  location?: number;
+  value?: number;
+  professionalism?: number;
+  responsiveness?: number;
+}
+
+export interface Review {
+  id: number;
+  hotel_id: number;
+  review_type: 'hotel' | 'staff';
+  rating: number;
+  title: string;
+  comment: string;
+  aspects: ReviewAspects;
+  would_recommend: boolean;
+  created_at: string;
+  reviewer_name: string;
+}
+
+export interface StaffAssignment {
+  id: number;
+  booking_id: number;
+  staff_id: number;
+  staff_name: string;
+  role: string;
+  assignment_type: string;
+  assigned_at: string;
+  assigned_by: string;
+  assignment_reason: string;
+}
+
+export interface Booking {
+  id: number;
+  confirmation_number: string;
+  user_id: string;
+  hotel_id: number;
+  hotel_name: string;
+  room_id: number;
+  room_type: string;
+  check_in: string;
+  check_out: string;
+  guests: number;
+  total_amount: number;
+  status: 'confirmed' | 'cancelled' | 'completed';
+  special_requests: string[];
+  created_at: string;
+  created_by: 'user' | 'agent';
+  agent_id?: string;
+  assigned_staff: StaffAssignment[];
+}
+
+// === API Response Types ===
+export interface HotelsResponse {
+  hotels: Hotel[];
+  total: number;
+}
+
+export interface ReviewsResponse {
+  reviews: Review[];
+  total: number;
+  summary?: {
+    average_rating: number;
+    total_reviews?: number;
+    total_by_rating?: {
+      "1": number;
+      "2": number;
+      "3": number;
+      "4": number;
+      "5": number;
+    };
+  };
+}
+
+export interface BookingsResponse {
+  bookings: Booking[];
+  total: number;
+}
+
+// === Search Types ===
+export interface SearchParams {
+  location: string;
+  check_in: string;
+  check_out: string;
+  guests: number;
+  rooms: number;
+  brand?: string;
+  amenities?: string[];
+  price_range?: PriceRange;
+}
+
+export interface SearchResult extends Hotel {
+  available_rooms: Array<Room & {
+    available: boolean;
+    price_per_night: number;
+  }>;
+  lowest_rate: number;
+}
+
+export interface SearchResponse {
+  hotels: SearchResult[];
+  search_id: string;
+}
+
+// === Request Types ===
+export interface BookingCreate {
+  user_id?: string;
+  hotel_id: number;
+  room_id: number;
+  check_in: string;
+  check_out: string;
+  guests: number;
+  special_requests?: string[];
+}
+
+export interface ReviewCreate {
+  booking_id: number;
+  review_type: 'hotel' | 'staff';
+  hotel_id: number;
+  staff_id?: number;
+  rating: number;
+  title: string;
+  comment: string;
+  aspects?: ReviewAspects;
+  would_recommend: boolean;
+}
+
+// === Legacy Types for Compatibility ===
 export interface HotelBasic {
   id: number;
   name: string;
@@ -23,20 +193,7 @@ export interface RoomBasic {
   cancellationPolicy?: string;
 }
 
-export interface Hotel {
-  id: number;
-  name: string;
-  description: string;
-  location: string;
-  rating: number;
-  amenities: string[];
-  policies: string[];
-  roomTypes: string[];
-  promotions: string[];
-  rooms: RoomBasic[];
-}
-
-// Enhanced UI Types
+// === UI Types ===
 export interface SearchFilters {
   location?: string;
   priceRange?: [number, number];
@@ -57,28 +214,7 @@ export interface BookingRequest extends BookingCreate {
   specialRequests?: string;
 }
 
-export interface BookingCreate {
-  hotel_id: number;
-  room_id: number;
-  check_in: string; // ISO date string
-  check_out: string; // ISO date string
-  guest_count: number;
-}
-
-export interface Booking {
-  id: number;
-  user_id: string;
-  hotel_id: number;
-  hotel_name: string;
-  room_id: number;
-  room_type: string;
-  check_in: string;
-  check_out: string;
-  guest_count: number;
-  total_price: number;
-}
-
-// Auth Types (Asgardeo-compatible)
+// === Auth Types (Asgardeo-compatible) ===
 export interface User {
   sub: string;
   username?: string;
@@ -98,7 +234,7 @@ export interface AuthContextType {
   hasScope: (scope: string) => boolean;
 }
 
-// Component Props Types
+// === Component Props Types ===
 export interface LoadingSpinnerProps {
   size?: 'sm' | 'md' | 'lg';
   className?: string;
@@ -109,7 +245,7 @@ export interface ErrorMessageProps {
   className?: string;
 }
 
-// API Error Type
+// === API Error Type ===
 export interface APIError {
   message: string;
   status: number;

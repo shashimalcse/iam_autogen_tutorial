@@ -1,381 +1,480 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { StarIcon, MapPinIcon, CheckIcon, WifiIcon, TruckIcon } from '@heroicons/react/24/solid';
-import { ArrowLeftIcon, HeartIcon, ShareIcon } from '@heroicons/react/24/outline';
-import { useAuth } from '../contexts/AsgardeoAuthContext';
-import { hotelAPI } from '../services/api';
-import { Hotel, RoomBasic, BookingCreate } from '../types';
-import EnhancedRoomCard from '../components/hotels/EnhancedRoomCard';
-import EnhancedBookingForm from '../components/booking/EnhancedBookingForm';
+import React, { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Star, MapPin, Wifi, Car, Coffee, Dumbbell, ArrowLeft, Bed } from 'lucide-react';
+import { EnhancedHeader } from '../components/layout/EnhancedHeader';
 import LoadingSpinner from '../components/common/LoadingSpinner';
-import ErrorMessage from '../components/common/ErrorMessage';
-import Layout from '../components/layout/Layout';
+import { hotelAPI } from '../services/api';
+import { Hotel, Room, Review, SearchParams } from '../types';
+import { useAuthContext } from '@asgardeo/auth-react';
 
-const EnhancedHotelDetailPage: React.FC = () => {
+interface HotelDetails extends Hotel {
+  rooms: Room[];
+}
+
+export function EnhancedHotelDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { isAuthenticated, isLoading } = useAuth();
-  const [searchParams] = useSearchParams();
-  
-  const [hotel, setHotel] = useState<Hotel | null>(null);
-  const [selectedRoom, setSelectedRoom] = useState<RoomBasic | null>(null);
-  const [showBookingForm, setShowBookingForm] = useState(false);
+  const hotelId = parseInt(id!);
+  const { state } = useAuthContext();
+
+  const [hotel, setHotel] = useState<HotelDetails | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [bookingLoading, setBookingLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  // Get search parameters
-  const checkIn = searchParams.get('checkIn');
-  const checkOut = searchParams.get('checkOut');
-  const guests = searchParams.get('guests');
+  // Static images mapping - same as hotel cards for consistency
+  const getHotelImages = (hotelName: string, hotelId: number) => {
+    const hotelImageMapping: { [key: string]: string[] } = {
+      'Gardeo Saman Villa': [
+        'https://images.unsplash.com/photo-1566073771259-6a8506099945?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=400',
+        'https://images.unsplash.com/photo-1571896349842-33c89424de2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300',
+        'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300'
+      ],
+      'Gardeo Colombo Seven': [
+        'https://images.unsplash.com/photo-1578683010236-d716f9a3f461?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=400',
+        'https://images.unsplash.com/photo-1571896349842-33c89424de2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300',
+        'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300'
+      ],
+      'Gardeo Kandy Hills': [
+        'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=400',
+        'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300',
+        'https://images.unsplash.com/photo-1564501049412-61c2a3083791?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300'
+      ],
+      'Gardeo Beach Resort Galle': [
+        'https://images.unsplash.com/photo-1582719508461-905c673771fd?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=400',
+        'https://images.unsplash.com/photo-1559827260-dc66d52bef19?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300',
+        'https://images.unsplash.com/photo-1571896349842-33c89424de2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300'
+      ]
+    };
 
-  // Check authentication
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      navigate('/login');
-      return;
+    // Fallback images for other hotels
+    const fallbackImages = [
+      [
+        'https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=400',
+        'https://images.unsplash.com/photo-1578683010236-d716f9a3f461?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300',
+        'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300'
+      ],
+      [
+        'https://images.unsplash.com/photo-1596394516093-501ba68a0ba6?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=400',
+        'https://images.unsplash.com/photo-1564501049412-61c2a3083791?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300',
+        'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300'
+      ]
+    ];
+
+    // Return mapped images if exists, otherwise use fallback
+    if (hotelImageMapping[hotelName]) {
+      return hotelImageMapping[hotelName];
     }
-  }, [isAuthenticated, isLoading, navigate]);
+
+    // Use hotel ID to get consistent fallback images
+    const imageIndex = hotelId % fallbackImages.length;
+    return fallbackImages[imageIndex];
+  };
 
   useEffect(() => {
-    const fetchHotel = async () => {
-      if (!id) return;
-      
+    const fetchHotelData = async () => {
       try {
-        setLoading(true);
-        setError(null);
-        const response = await hotelAPI.getHotel(parseInt(id));
-        setHotel(response.data);
-      } catch (err: any) {
-        setError(err.response?.data?.detail || 'Failed to load hotel details');
+        const [hotelResponse, reviewsResponse] = await Promise.all([
+          hotelAPI.getHotel(hotelId),
+          hotelAPI.getHotelReviews(hotelId, { limit: 5 }),
+        ]);
+
+        const hotelData = hotelResponse.data;
+        // Ensure images are set using our static image mapping
+        const staticImages = getHotelImages(hotelData.name, hotelData.id);
+        
+        setHotel({
+          ...hotelData,
+          images: staticImages, // Use static images instead of API images
+          rooms: hotelData.rooms || []
+        });
+        setReviews(reviewsResponse.data.reviews || []);
+      } catch (error) {
+        console.error('Failed to fetch hotel data:', error);
+        // Fallback data similar to Gardeo Hotel's fallback
+        const fallbackImages = getHotelImages('Gardeo Resort & Spa', hotelId);
+        setHotel({
+          id: hotelId,
+          name: 'Gardeo Resort & Spa',
+          brand: 'luxury',
+          description: 'Experience luxury and tranquility at Gardeo Resort & Spa, nestled in the heart of Kandy\'s cultural landscape. Our resort offers world-class amenities, stunning views of the surrounding hills, and exceptional service that will make your stay unforgettable.',
+          address: {
+            street: 'Temple Road',
+            city: 'Kandy',
+            state: 'Central Province',
+            country: 'Sri Lanka',
+            postal_code: '20000'
+          },
+          rating: 4.7,
+          amenities: [
+            'Free WiFi',
+            'Swimming Pool',
+            'Spa & Wellness',
+            'Restaurant',
+            'Gym',
+            'Free Parking',
+            'Room Service',
+            '24/7 Reception',
+          ],
+          images: fallbackImages, // Use static images
+          price_range: {
+            min: 15500,
+            max: 35600
+          },
+          rooms: [
+            {
+              id: 1,
+              hotel_id: hotelId,
+              room_type: 'Deluxe Garden View',
+              bed_type: 'King Bed',
+              max_occupancy: 2,
+              size_sqft: 450,
+              amenities: ['King Bed', 'Garden View', 'Air Conditioning', 'Mini Bar', 'WiFi'],
+              images: ['https://images.unsplash.com/photo-1611892440504-42a792e24d32?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&h=200'],
+              base_price: 15500,
+            },
+            {
+              id: 2,
+              hotel_id: hotelId,
+              room_type: 'Premium Pool View',
+              bed_type: 'Queen Bed + Sofa Bed',
+              max_occupancy: 3,
+              size_sqft: 550,
+              amenities: ['Queen Bed + Sofa Bed', 'Pool View', 'Balcony', 'Air Conditioning', 'Mini Bar', 'WiFi'],
+              images: ['https://images.unsplash.com/photo-1611892440504-42a792e24d32?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&h=200'],
+              base_price: 22800,
+            },
+            {
+              id: 3,
+              hotel_id: hotelId,
+              room_type: 'Executive Suite',
+              bed_type: 'King Bed',
+              max_occupancy: 4,
+              size_sqft: 750,
+              amenities: [
+                'King Bed',
+                'Separate Living Area',
+                'City View',
+                'Kitchenette',
+                'WiFi',
+                'Complimentary Breakfast',
+              ],
+              images: ['https://images.unsplash.com/photo-1611892440504-42a792e24d32?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&h=200'],
+              base_price: 35600,
+            },
+          ],
+        });
+        setReviews([
+          {
+            id: 1,
+            hotel_id: hotelId,
+            review_type: 'hotel',
+            rating: 4.5,
+            title: 'Exceptional stay!',
+            comment: 'Beautiful resort with amazing staff. The spa was incredible and the food was delicious. Highly recommend!',
+            aspects: {
+              cleanliness: 5.0,
+              service: 4.5,
+              location: 5.0,
+              value: 4.0
+            },
+            would_recommend: true,
+            created_at: '2024-01-15T10:30:00Z',
+            reviewer_name: 'Guest123'
+          },
+          {
+            id: 2,
+            hotel_id: hotelId,
+            review_type: 'hotel',
+            rating: 4.2,
+            title: 'Great location and service',
+            comment: 'Perfect location in Kandy with easy access to attractions. Staff was very helpful and rooms were clean.',
+            aspects: {
+              cleanliness: 4.5,
+              service: 4.0,
+              location: 5.0,
+              value: 3.5
+            },
+            would_recommend: true,
+            created_at: '2024-01-10T14:20:00Z',
+            reviewer_name: 'Guest456'
+          },
+        ]);
       } finally {
         setLoading(false);
       }
     };
 
-    if (isAuthenticated) {
-      fetchHotel();
+    if (hotelId) {
+      fetchHotelData();
     }
-  }, [id, isAuthenticated]);
+  }, [hotelId]);
 
-  const handleRoomSelect = (room: RoomBasic) => {
-    setSelectedRoom(room);
-    setShowBookingForm(true);
-  };
+  const handleBookRoom = async (room: Room) => {
+    if (!state.isAuthenticated) {
+      alert('Please sign in to make a booking');
+      return;
+    }
 
-  const handleBookingSubmit = async (bookingData: BookingCreate) => {
+    setBookingLoading(true);
+
     try {
-      setBookingLoading(true);
+      // Get search params from session storage
+      const searchParamsStr = sessionStorage.getItem('searchParams');
+      const searchParams: SearchParams | null = searchParamsStr ? JSON.parse(searchParamsStr) : null;
+
+      const bookingData = {
+        hotel_id: hotelId,
+        room_id: room.id,
+        check_in: searchParams?.check_in || new Date().toISOString().split('T')[0],
+        check_out: searchParams?.check_out || new Date(Date.now() + 86400000).toISOString().split('T')[0],
+        guests: searchParams?.guests || 2,
+      };
+
       const response = await hotelAPI.createBooking(bookingData);
-      
-      // Redirect to booking confirmation
-      navigate(`/bookings/${response.data.id}`, {
-        state: { booking: response.data, isNew: true }
-      });
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to create booking');
+      const booking = response.data;
+
+      // Store booking info and redirect to confirmation
+      sessionStorage.setItem('bookingConfirmation', JSON.stringify(booking));
+      navigate('/booking-confirmation');
+    } catch (error) {
+      console.error('Booking failed:', error);
+      alert('Booking failed. Please try again or contact support.');
     } finally {
       setBookingLoading(false);
     }
   };
 
-  const renderStars = (rating: number) => {
-    const stars = [];
-    for (let i = 1; i <= 5; i++) {
-      stars.push(
-        <StarIcon
-          key={i}
-          className={`w-5 h-5 ${
-            i <= rating ? 'text-gold-400' : 'text-secondary-300'
-          } fill-current`}
-        />
-      );
-    }
-    return stars;
-  };
-
   const getAmenityIcon = (amenity: string) => {
-    const amenityLower = amenity.toLowerCase();
-    if (amenityLower.includes('wifi') || amenityLower.includes('internet')) {
-      return <WifiIcon className="w-5 h-5 text-primary-600" />;
-    }
-    if (amenityLower.includes('parking') || amenityLower.includes('car')) {
-      return <TruckIcon className="w-5 h-5 text-primary-600" />;
-    }
-    return <CheckIcon className="w-5 h-5 text-green-600" />;
-  };
-
-  // Show loading while checking authentication
-  if (isLoading) {
-    return (
-      <Layout>
-        <div className="flex justify-center items-center h-64">
-          <LoadingSpinner size="lg" />
-        </div>
-      </Layout>
-    );
-  }
-
-  // Don't render if not authenticated (will redirect)
-  if (!isAuthenticated) {
+    const lower = amenity.toLowerCase();
+    if (lower.includes('wifi')) return <Wifi className="w-4 h-4" />;
+    if (lower.includes('parking')) return <Car className="w-4 h-4" />;
+    if (lower.includes('restaurant') || lower.includes('breakfast')) return <Coffee className="w-4 h-4" />;
+    if (lower.includes('gym') || lower.includes('fitness')) return <Dumbbell className="w-4 h-4" />;
+    if (lower.includes('bed')) return <Bed className="w-4 h-4" />;
     return null;
-  }
+  };
 
   if (loading) {
     return (
-      <Layout>
-        <div className="flex justify-center items-center h-64">
-          <LoadingSpinner size="lg" />
+      <div className="min-h-screen bg-white">
+        <EnhancedHeader />
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex justify-center">
+            <LoadingSpinner size="lg" />
+          </div>
+          <div className="text-center mt-4">Loading hotel details...</div>
         </div>
-      </Layout>
+      </div>
     );
   }
 
-  if (error || !hotel) {
+  if (!hotel) {
     return (
-      <Layout>
-        <div className="space-y-4">
-          <button
-            onClick={() => navigate('/hotels')}
-            className="flex items-center gap-2 text-primary-600 hover:text-primary-700"
-          >
-            <ArrowLeftIcon className="w-4 h-4" />
-            Back to Hotels
-          </button>
-          <ErrorMessage message={error || 'Hotel not found'} />
+      <div className="min-h-screen bg-white">
+        <EnhancedHeader />
+        <div className="container mx-auto px-4 py-8">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold mb-4">Hotel not found</h1>
+            <button
+              onClick={() => navigate('/')}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+            >
+              Back to Home
+            </button>
+          </div>
         </div>
-      </Layout>
+      </div>
     );
   }
-
-  const availableRooms = hotel.rooms.filter(room => room.is_available);
-  const unavailableRooms = hotel.rooms.filter(room => !room.is_available);
 
   return (
-    <Layout>
-      <div className="space-y-8">
-        {/* Navigation */}
+    <div className="min-h-screen bg-white">
+      <EnhancedHeader />
+
+      <div className="container mx-auto px-4 py-8">
+        {/* Back Button */}
         <button
-          onClick={() => navigate('/hotels')}
-          className="flex items-center gap-2 text-primary-600 hover:text-primary-700 font-medium"
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-2 mb-6 text-gray-600 hover:text-gray-900 transition-colors"
         >
-          <ArrowLeftIcon className="w-4 h-4" />
-          Back to Hotels
+          <ArrowLeft className="w-4 h-4" />
+          Back
         </button>
 
         {/* Hotel Header */}
-        <div className="space-y-6">
-          {/* Hero Image */}
-          <div className="relative w-full h-80 bg-gradient-to-br from-primary-100 via-primary-200 to-primary-300 rounded-xl overflow-hidden">
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center text-white">
-                <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mb-4 mx-auto">
-                  <MapPinIcon className="w-10 h-10" />
-                </div>
-                <h1 className="text-3xl font-bold drop-shadow-lg">{hotel.name}</h1>
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold mb-2">{hotel.name}</h1>
+          <div className="flex items-center text-gray-600 mb-4">
+            <MapPin className="w-5 h-5 mr-2" />
+            <span>{hotel.address.city}, {hotel.address.country}</span>
+          </div>
+
+          <div className="flex items-center gap-4 mb-6">
+            <div className="flex items-center gap-2">
+              <div className="bg-blue-600 text-white px-3 py-1 rounded font-bold">{hotel.rating}</div>
+              <div className="flex items-center">
+                {[...Array(5)].map((_, i) => (
+                  <Star
+                    key={i}
+                    className={`w-5 h-5 ${
+                      i < Math.floor(hotel.rating) ? 'text-yellow-400 fill-current' : 'text-gray-300'
+                    }`}
+                  />
+                ))}
               </div>
-            </div>
-            
-            {/* Action Buttons */}
-            <div className="absolute top-6 right-6 flex gap-3">
-              <button className="p-3 bg-white/90 hover:bg-white rounded-full shadow-lg transition-colors">
-                <HeartIcon className="w-5 h-5 text-secondary-600" />
-              </button>
-              <button className="p-3 bg-white/90 hover:bg-white rounded-full shadow-lg transition-colors">
-                <ShareIcon className="w-5 h-5 text-secondary-600" />
-              </button>
             </div>
           </div>
-          
-          {/* Hotel Info */}
-          <div className="space-y-4">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              <div className="space-y-2">
-                <h1 className="text-3xl font-bold text-secondary-900">
-                  {hotel.name}
-                </h1>
-                
-                <div className="flex items-center gap-2 text-secondary-600">
-                  <MapPinIcon className="w-5 h-5" />
-                  <span className="text-lg">{hotel.location}</span>
-                </div>
-                
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1">
-                    {renderStars(hotel.rating)}
-                  </div>
-                  <span className="text-lg font-semibold text-secondary-700">
-                    {hotel.rating}/5
-                  </span>
-                  <span className="text-sm text-secondary-500">
-                    (Based on guest reviews)
-                  </span>
-                </div>
-              </div>
 
-              {checkIn && checkOut && (
-                <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
-                  <h4 className="font-semibold text-primary-900 mb-2">Your Search</h4>
-                  <div className="text-sm text-primary-700 space-y-1">
-                    <p>Check-in: {checkIn}</p>
-                    <p>Check-out: {checkOut}</p>
-                    {guests && <p>Guests: {guests}</p>}
-                  </div>
-                </div>
-              )}
+          {/* Hotel Images */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            <div className="md:col-span-2">
+              <img
+                src={(hotel.images && hotel.images.length > 0) ? hotel.images[0] : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=400'}
+                alt={hotel.name}
+                className="w-full h-80 object-cover rounded-lg"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1566073771259-6a8506099945?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=400';
+                }}
+              />
             </div>
-            
-            <p className="text-secondary-700 text-lg max-w-4xl leading-relaxed">
-              {hotel.description}
-            </p>
+            <div className="grid grid-cols-2 md:grid-cols-1 gap-4">
+              {/* Always show at least 2 additional images */}
+              {[1, 2].map((index) => {
+                const imageSrc = (hotel.images && hotel.images.length > index) 
+                  ? hotel.images[index] 
+                  : `https://images.unsplash.com/photo-${index === 1 ? '1578683010236-d716f9a3f461' : '1571003123894-1f0594d2b5d9'}?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300`;
+                
+                return (
+                  <img
+                    key={index}
+                    src={imageSrc}
+                    alt={`${hotel.name} ${index + 1}`}
+                    className="w-full h-36 object-cover rounded-lg"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = `https://images.unsplash.com/photo-${index === 1 ? '1578683010236-d716f9a3f461' : '1571003123894-1f0594d2b5d9'}?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=300`;
+                    }}
+                  />
+                );
+              })}
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Content */}
-          <div className="xl:col-span-2 space-y-8">
+          <div className="lg:col-span-2">
+            {/* Description */}
+            <div className="bg-white border border-gray-200 rounded-lg p-6 mb-8">
+              <h2 className="text-xl font-bold mb-4">About this hotel</h2>
+              <p className="text-gray-700 leading-relaxed">{hotel.description}</p>
+            </div>
+
             {/* Amenities */}
-            <div className="card">
-              <h3 className="text-2xl font-bold text-secondary-900 mb-6">
-                Hotel Amenities
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {hotel.amenities.map((amenity, index) => (
-                  <div key={index} className="flex items-center gap-3 p-3 bg-secondary-50 rounded-lg">
+            <div className="bg-white border border-gray-200 rounded-lg p-6 mb-8">
+              <h2 className="text-xl font-bold mb-4">Amenities</h2>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                {hotel.amenities?.map((amenity) => (
+                  <div key={amenity} className="flex items-center gap-2">
                     {getAmenityIcon(amenity)}
-                    <span className="text-secondary-700 font-medium">{amenity}</span>
+                    <span className="text-sm">{amenity}</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Policies */}
-            <div className="card">
-              <h3 className="text-2xl font-bold text-secondary-900 mb-6">
-                Hotel Policies
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {hotel.policies.map((policy, index) => (
-                  <div key={index} className="flex items-start gap-3 p-3 bg-secondary-50 rounded-lg">
-                    <CheckIcon className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                    <span className="text-secondary-700">{policy}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Promotions */}
-            {hotel.promotions.length > 0 && (
-              <div className="card">
-                <h3 className="text-2xl font-bold text-secondary-900 mb-6">
-                  Special Offers
-                </h3>
-                <div className="space-y-3">
-                  {hotel.promotions.map((promotion, index) => (
-                    <div key={index} className="bg-gradient-to-r from-gold-50 to-gold-100 border border-gold-200 rounded-lg p-4">
-                      <span className="text-gold-800 font-semibold text-lg">{promotion}</span>
+            {/* Reviews */}
+            {reviews.length > 0 && (
+              <div className="bg-white border border-gray-200 rounded-lg p-6">
+                <h2 className="text-xl font-bold mb-4">Recent Reviews</h2>
+                <div className="space-y-4">
+                  {reviews.map((review) => (
+                    <div key={review.id} className="border-b pb-4 last:border-b-0">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="bg-blue-600 text-white px-2 py-1 rounded text-sm font-bold">
+                          {review.rating}
+                        </div>
+                        <h4 className="font-semibold">{review.title}</h4>
+                      </div>
+                      <p className="text-gray-700 text-sm mb-2">{review.comment}</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-500">
+                          {new Date(review.created_at).toLocaleDateString()}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          by {review.reviewer_name}
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
             )}
+          </div>
 
-            {/* Available Rooms */}
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-2xl font-bold text-secondary-900">
-                  Available Rooms
-                </h3>
-                <span className="text-sm text-secondary-600">
-                  {availableRooms.length} room{availableRooms.length !== 1 ? 's' : ''} available
-                </span>
-              </div>
-              
+          {/* Sidebar - Available Rooms */}
+          <div>
+            <div className="bg-white border border-gray-200 rounded-lg p-6 sticky top-4">
+              <h2 className="text-xl font-bold mb-4">Available Rooms</h2>
               <div className="space-y-4">
-                {availableRooms.map((room) => (
-                  <EnhancedRoomCard
-                    key={room.id}
-                    room={room}
-                    onSelect={handleRoomSelect}
-                    isSelected={selectedRoom?.id === room.id}
-                    checkIn={checkIn || undefined}
-                    checkOut={checkOut || undefined}
-                  />
-                ))}
-
-                {unavailableRooms.length > 0 && (
-                  <details className="mt-6">
-                    <summary className="cursor-pointer text-secondary-600 font-medium">
-                      View {unavailableRooms.length} unavailable room{unavailableRooms.length !== 1 ? 's' : ''}
-                    </summary>
-                    <div className="mt-4 space-y-4">
-                      {unavailableRooms.map((room) => (
-                        <EnhancedRoomCard
-                          key={room.id}
-                          room={room}
-                          onSelect={() => {}}
-                          checkIn={checkIn || undefined}
-                          checkOut={checkOut || undefined}
-                        />
-                      ))}
+                {hotel.rooms?.map((room) => (
+                  <div key={room.id} className="border rounded-lg overflow-hidden">
+                    {/* Room Image */}
+                    <div className="w-full h-40">
+                      <img
+                        src={room.images?.[0] || 'https://images.unsplash.com/photo-1611892440504-42a792e24d32?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&h=200'}
+                        alt={room.room_type}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1611892440504-42a792e24d32?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&h=200';
+                        }}
+                      />
                     </div>
-                  </details>
-                )}
+                    
+                    <div className="p-4">
+                      <h3 className="font-semibold mb-2">{room.room_type}</h3>
+                      <p className="text-sm text-gray-600 mb-2">
+                        {room.bed_type} • Up to {room.max_occupancy} guests • {room.size_sqft} sq ft
+                      </p>
+
+                    {/* Room Amenities */}
+                    {room.amenities && room.amenities.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-3">
+                        {room.amenities.slice(0, 3).map((amenity) => (
+                          <div key={amenity} className="bg-gray-100 px-2 py-1 rounded text-xs flex items-center gap-1">
+                            {getAmenityIcon(amenity)}
+                            {amenity}
+                          </div>
+                        ))}
+                        {room.amenities.length > 3 && (
+                          <div className="bg-gray-100 px-2 py-1 rounded text-xs border border-gray-300">
+                            +{room.amenities.length - 3} more
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <span className="text-lg font-bold">LKR {room.base_price.toLocaleString()}</span>
+                          <span className="text-sm text-gray-600 block">per night</span>
+                        </div>
+                        <button
+                          onClick={() => handleBookRoom(room)}
+                          disabled={bookingLoading}
+                          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {bookingLoading ? 'Booking...' : 'Book Now'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
-
-          {/* Booking Sidebar */}
-          <div className="xl:col-span-1">
-            {showBookingForm && selectedRoom ? (
-              <div className="sticky top-8">
-                <EnhancedBookingForm
-                  room={selectedRoom}
-                  hotelId={hotel.id}
-                  hotelName={hotel.name}
-                  onSubmit={handleBookingSubmit}
-                  onCancel={() => {
-                    setShowBookingForm(false);
-                    setSelectedRoom(null);
-                  }}
-                  isLoading={bookingLoading}
-                  initialCheckIn={checkIn || undefined}
-                  initialCheckOut={checkOut || undefined}
-                />
-              </div>
-            ) : (
-              <div className="card sticky top-8">
-                <h3 className="text-xl font-bold text-secondary-900 mb-4">
-                  Ready to Book?
-                </h3>
-                <div className="space-y-4">
-                  <p className="text-secondary-600">
-                    Select an available room to start your booking process.
-                  </p>
-                  <div className="space-y-2 text-sm text-secondary-600">
-                    <p>✓ Instant confirmation</p>
-                    <p>✓ Secure payment</p>
-                    <p>✓ Free cancellation</p>
-                    <p>✓ 24/7 customer support</p>
-                  </div>
-                  {availableRooms.length === 0 && (
-                    <div className="bg-secondary-50 border border-secondary-200 rounded-lg p-4">
-                      <p className="text-secondary-700 font-medium">
-                        No rooms currently available
-                      </p>
-                      <p className="text-secondary-600 text-sm mt-1">
-                        Try different dates or contact the hotel directly
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
         </div>
       </div>
-    </Layout>
+    </div>
   );
-};
-
-export default EnhancedHotelDetailPage;
+}

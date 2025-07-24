@@ -69,7 +69,7 @@ const EnhancedBookingForm: React.FC<EnhancedBookingFormProps> = ({
       room_id: room.id,
       check_in: checkIn,
       check_out: checkOut,
-      guest_count: guestCount,
+      guests: guestCount,
     });
   };
 

@@ -7,7 +7,7 @@ import { hotelAPI } from '../services/api';
 import { Booking } from '../types';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import ErrorMessage from '../components/common/ErrorMessage';
-import Layout from '../components/layout/Layout';
+import { EnhancedHeader } from '../components/layout/EnhancedHeader';
 
 const BookingsPage: React.FC = () => {
   const { user, hasScope } = useAuth();
@@ -23,7 +23,7 @@ const BookingsPage: React.FC = () => {
         setLoading(true);
         setError(null);
         const response = await hotelAPI.getUserBookings(user.sub);
-        setBookings(response.data);
+        setBookings(response.data.bookings || []);
       } catch (err: any) {
         setError(err.response?.data?.detail || 'Failed to load bookings');
       } finally {
@@ -36,39 +36,47 @@ const BookingsPage: React.FC = () => {
 
   if (loading) {
     return (
-      <Layout>
-        <div className="flex justify-center items-center h-64">
-          <LoadingSpinner size="lg" />
+      <div className="min-h-screen bg-white">
+        <EnhancedHeader />
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex justify-center items-center h-64">
+            <LoadingSpinner size="lg" />
+          </div>
         </div>
-      </Layout>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <Layout>
-        <ErrorMessage message={error} />
-      </Layout>
+      <div className="min-h-screen bg-white">
+        <EnhancedHeader />
+        <div className="container mx-auto px-4 py-8">
+          <ErrorMessage message={error} />
+        </div>
+      </div>
     );
   }
 
   return (
-    <Layout>
-      <div className="space-y-8">
-        {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-secondary-900">
-              My Bookings
-            </h1>
-            <p className="text-secondary-600 mt-1">
-              Manage your hotel reservations
-            </p>
+    <div className="min-h-screen bg-white">
+      <EnhancedHeader />
+      <div className="container mx-auto px-4 py-8">
+        <div className="space-y-8">
+          {/* Header */}
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">
+                My Bookings
+              </h1>
+              <p className="text-gray-600 mt-1">
+                Manage your hotel reservations
+              </p>
+            </div>
+            <Link to="/hotels" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors">
+              Book New Stay
+            </Link>
           </div>
-          <Link to="/hotels" className="btn-primary">
-            Book New Stay
-          </Link>
-        </div>
 
         {/* Bookings List */}
         {bookings.length === 0 ? (
@@ -124,7 +132,7 @@ const BookingsPage: React.FC = () => {
 
                     <div className="flex items-center justify-between">
                       <span className="text-lg font-semibold text-primary-600">
-                        ${booking.total_price}
+                        LKR {booking.total_amount?.toLocaleString()}
                       </span>
                       <Link
                         to={`/bookings/${booking.id}`}
@@ -140,8 +148,9 @@ const BookingsPage: React.FC = () => {
             ))}
           </div>
         )}
+        </div>
       </div>
-    </Layout>
+    </div>
   );
 };
 

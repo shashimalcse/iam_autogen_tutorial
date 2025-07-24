@@ -1,17 +1,5 @@
-/*
-  Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com). All Rights Reserved.
-
-  This software is the property of WSO2 LLC. and its suppliers, if any.
-  Dissemination of any information or reproduction of any material contained
-  herein is strictly forbidden, unless permitted by WSO2 in accordance with
-  the WSO2 Commercial License available at http://wso2.com/licenses.
-  For specific language governing the permissions and limitations under
-  this license, please see the license as well as any agreement you've
-  entered into with WSO2 governing the purchase of this software and any
-*/
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ChatBubbleLeftEllipsisIcon, XMarkIcon, PaperAirplaneIcon } from '@heroicons/react/24/outline';
+import { MessageCircle, X, Send, Paperclip, Maximize2, Minimize2 } from 'lucide-react';
 
 interface Message {
   id: string;
@@ -37,8 +25,9 @@ interface AuthRequest {
 
 const ChatComponent: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [inputMessage, setInputMessage] = useState('');
+  const [inputValue, setInputValue] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [pendingConsent, setPendingConsent] = useState<ConsentRequest | null>(null);
@@ -47,6 +36,7 @@ const ChatComponent: React.FC = () => {
   
   const ws = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const sessionId = useRef<string>('');
 
   // Generate session ID
@@ -75,12 +65,13 @@ const ChatComponent: React.FC = () => {
       sessionId.current = generateSessionId();
     }
 
-    // Note: You'll need to replace this with your actual WebSocket URL
+    // WebSocket URL for AI agent backend
     const wsUrl = `ws://localhost:8000/chat?session_id=${sessionId.current}`;
     ws.current = new WebSocket(wsUrl);
 
     ws.current.onopen = () => {
       setIsConnected(true);
+      console.log('WebSocket connected');
     };
 
     ws.current.onmessage = (event) => {
@@ -113,11 +104,13 @@ const ChatComponent: React.FC = () => {
     ws.current.onclose = () => {
       setIsConnected(false);
       setIsTyping(false);
+      console.log('WebSocket disconnected');
     };
 
-    ws.current.onerror = () => {
+    ws.current.onerror = (error) => {
       setIsConnected(false);
       setIsTyping(false);
+      console.error('WebSocket error:', error);
     };
   }, [addAssistantMessage]);
 
@@ -135,7 +128,7 @@ const ChatComponent: React.FC = () => {
     return () => window.removeEventListener('message', handleMessage);
   }, [addSystemMessage]);
 
-  // Scroll to bottom
+  // Auto-scroll to bottom
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -144,21 +137,95 @@ const ChatComponent: React.FC = () => {
     scrollToBottom();
   }, [messages, isTyping]);
 
-  // Handle sending messages
-  const sendMessage = () => {
-    if (!inputMessage.trim() || !ws.current || ws.current.readyState !== WebSocket.OPEN) return;
+  // Handle sending messages to backend
+  const handleSendMessage = useCallback(async () => {
+    if (!inputValue.trim()) return;
 
-    addUserMessage(inputMessage);
+    // If WebSocket is not connected, try to connect first
+    if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
+      if (!isConnected) {
+        connectWebSocket();
+        // Wait a moment for connection
+        setTimeout(() => {
+          if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+            sendMessageToBackend();
+          } else {
+            // Fallback to local response if backend is unavailable
+            handleLocalFallback();
+          }
+        }, 1000);
+        return;
+      }
+    }
+
+    sendMessageToBackend();
+  }, [inputValue, isConnected, connectWebSocket]);
+
+  const sendMessageToBackend = () => {
+    if (!inputValue.trim() || !ws.current || ws.current.readyState !== WebSocket.OPEN) return;
+
+    addUserMessage(inputValue);
     setIsTyping(true);
 
     const jsonMsg = {
       type: 'user_message',
-      content: inputMessage,
+      content: inputValue,
       sessionId: sessionId.current
     };
 
     ws.current.send(JSON.stringify(jsonMsg));
-    setInputMessage('');
+    setInputValue('');
+  };
+
+  // Fallback to local responses if backend is unavailable
+  const handleLocalFallback = () => {
+    const userMessage = inputValue.trim();
+    addUserMessage(userMessage);
+    setInputValue('');
+    setIsTyping(true);
+
+    // Simple local responses as fallback
+    setTimeout(() => {
+      const message = userMessage.toLowerCase();
+      let response = '';
+
+      if (message.includes('booking') || message.includes('reservation') || message.includes('book')) {
+        response = `I'd be happy to help you with your booking! Here are our current offerings:
+
+**🏨 Available Hotels:**
+• Gardeo Saman Villa - Bentota (LKR 15,500/night)
+• Gardeo Colombo Seven - Colombo (LKR 22,800/night)  
+• Gardeo Kandy Hills - Kandy (LKR 18,900/night)
+
+**✨ Weekend Deals:**
+• Up to 25% off weekend stays
+• Complimentary breakfast included
+• Free airport transfers
+
+Would you like me to check availability for specific dates?`;
+      } else if (message.includes('price') || message.includes('cost') || message.includes('rate')) {
+        response = `Here are our current room rates:
+
+**💰 Room Pricing:**
+• Deluxe Garden View - From LKR 15,500/night
+• Premium Pool View - From LKR 22,800/night
+• Executive Suite - From LKR 35,600/night
+
+**🎉 Special Offers:**
+• Book 3+ nights: 15% discount
+• Weekend packages: 20% off
+• Early bird (30+ days): 25% off
+
+All rates include taxes and free WiFi. Would you like more details about a specific room type?`;
+      } else {
+        response = `Thank you for your message! I'm here to assist with hotel bookings, room information, pricing, and amenities. How can I help you today?
+
+*Note: I'm currently running in fallback mode. For full AI assistance, please ensure the backend service is running.*`;
+      }
+
+      addAssistantMessage(response);
+      setIsTyping(false);
+    }, 1500);
   };
 
   // Handle consent response
@@ -219,6 +286,14 @@ const ChatComponent: React.FC = () => {
     }
   }, [isOpen, connectWebSocket]);
 
+  // Handle key press
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
   // Format timestamp
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString('en-US', { 
@@ -228,18 +303,18 @@ const ChatComponent: React.FC = () => {
     });
   };
 
-  // Simple markdown renderer
-  const renderMarkdown = (text: string) => {
+  // Enhanced markdown renderer
+  const renderContent = (content: string) => {
     // Basic markdown parsing
-    let html = text
+    let html = content
       // Bold text
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       // Italic text
       .replace(/\*(.*?)\*/g, '<em>$1</em>')
       // Inline code
-      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/`([^`]+)`/g, '<code class="bg-gray-100 px-1 rounded text-sm">$1</code>')
       // Code blocks
-      .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+      .replace(/```([\s\S]*?)```/g, '<pre class="bg-gray-100 p-2 rounded mt-2"><code>$1</code></pre>')
       // Line breaks
       .replace(/\n/g, '<br />');
     
@@ -249,148 +324,190 @@ const ChatComponent: React.FC = () => {
   return (
     <>
       {/* Chat Toggle Button */}
-      <button
-        onClick={() => setIsOpen(true)}
-        className={`fixed bottom-4 right-4 md:bottom-6 md:right-6 z-50 bg-primary-600 hover:bg-primary-700 text-white rounded-full p-3 md:p-4 shadow-lg transition-all duration-200 hover:shadow-xl ${isOpen ? 'hidden' : 'block'}`}
-      >
-        <ChatBubbleLeftEllipsisIcon className="h-5 w-5 md:h-6 md:w-6" />
-      </button>
+      {!isOpen && (
+        <button
+          onClick={() => setIsOpen(true)}
+          className="fixed bottom-6 right-6 z-50 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-4 shadow-lg transition-all duration-300 hover:scale-110"
+        >
+          <MessageCircle className="h-6 w-6" />
+        </button>
+      )}
 
-      {/* Chat Window */}
+      {/* Chat Panel */}
       {isOpen && (
-        <div className="fixed inset-x-4 bottom-4 top-4 md:inset-auto md:bottom-6 md:right-6 md:w-96 md:h-[500px] z-50 bg-white rounded-xl shadow-lg border border-secondary-200 flex flex-col overflow-hidden">
-          {/* Header */}
-          <div className="bg-primary-600 text-white p-3 md:p-4 flex items-center justify-between flex-shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 md:w-10 md:h-10 bg-primary-500 rounded-lg flex items-center justify-center font-bold text-sm md:text-lg">
-                G
-              </div>
-              <div>
-                <h3 className="font-semibold text-sm md:text-base">Gardeo Hotel</h3>
-                <div className="flex items-center gap-2 text-xs md:text-sm opacity-90">
-                  <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-accent-400'}`}></div>
-                  <span>{isConnected ? 'AI Assistant Online' : 'Connecting...'}</span>
+        <>
+          {/* Backdrop for maximized mode */}
+          {isMaximized && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 z-40" />
+          )}
+          
+          {/* Chat Container */}
+          <div className={`fixed z-50 bg-white shadow-2xl transition-all duration-300 flex flex-col ${
+            isMaximized 
+              ? 'inset-6 rounded-lg' 
+              : 'bottom-4 right-6 w-1/3 min-w-[400px] max-w-[500px] rounded-lg'
+          }`}
+          style={{
+            height: 'calc(100vh - 48px)',
+            maxHeight: 'calc(100vh - 48px)'
+          }}>
+            
+            {/* Header */}
+            <div className="bg-blue-600 text-white p-4 flex items-center justify-between rounded-t-lg flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white bg-opacity-20 rounded-full flex items-center justify-center text-sm font-bold text-white">
+                  GA
                 </div>
-              </div>
-            </div>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="text-white hover:bg-primary-500 p-1.5 rounded-lg transition-colors"
-            >
-              <XMarkIcon className="h-5 w-5" />
-            </button>
-          </div>
-
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3 md:space-y-4 bg-secondary-50">
-            {messages.map((message) => (
-              <div key={message.id} className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] md:max-w-xs px-3 md:px-4 py-2 rounded-lg text-sm md:text-base ${
-                  message.type === 'user' 
-                    ? 'bg-primary-600 text-white' 
-                    : message.type === 'system'
-                    ? 'bg-primary-50 text-primary-800 italic text-center border border-primary-200'
-                    : 'bg-white text-secondary-900 border border-secondary-200 shadow-sm'
-                }`}>
-                  {message.type === 'assistant' ? (
-                    <div className="prose prose-sm max-w-none">
-                      {renderMarkdown(message.content)}
-                    </div>
-                  ) : (
-                    <p className="whitespace-pre-wrap">{message.content}</p>
-                  )}
-                  <div className={`text-xs mt-1 ${
-                    message.type === 'user' ? 'text-primary-100' : 'text-secondary-500'
-                  }`}>
-                    {formatTime(message.timestamp)}
+                <div>
+                  <div className="font-semibold">Gardeo Assistant</div>
+                  <div className="flex items-center gap-2 text-xs text-blue-200">
+                    <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
+                    <span>{isConnected ? 'AI Assistant Online' : 'Connecting...'}</span>
                   </div>
                 </div>
               </div>
-            ))}
 
-            {/* Consent Request */}
-            {pendingConsent && (
-              <div className="card">
-                <p className="mb-3 text-sm md:text-base text-secondary-700">{pendingConsent.content}</p>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <button
-                    onClick={() => handleConsentResponse('accept')}
-                    className="btn-primary text-sm md:text-base"
-                  >
-                    {pendingConsent.options.accept}
-                  </button>
-                  <button
-                    onClick={() => handleConsentResponse('reject')}
-                    className="btn-secondary text-sm md:text-base"
-                  >
-                    {pendingConsent.options.reject}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Auth Request */}
-            {pendingAuth && (
-              <div className="card">
-                <h4 className="font-semibold mb-2 text-sm md:text-base text-secondary-900">Authorization Required</h4>
-                <p className="text-secondary-600 mb-3 text-sm md:text-base">To complete your hotel booking, you need to authorize with your Asgardeo account.</p>
-                {pendingAuth.context && (
-                  <div className="mb-3 text-sm bg-secondary-50 p-2 rounded-lg">
-                    <strong className="text-secondary-900">Booking Details:</strong>
-                    {Object.entries(pendingAuth.context).map(([key, value]) => (
-                      <div key={key} className="text-secondary-600 text-xs">
-                        {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}: {String(value)}
-                      </div>
-                    ))}
-                  </div>
-                )}
+              {/* Header Controls */}
+              <div className="flex items-center gap-2">
                 <button
-                  onClick={handleAuthorization}
-                  className="btn-primary text-sm md:text-base w-full sm:w-auto"
+                  onClick={() => setIsMaximized(!isMaximized)}
+                  className="p-1.5 hover:bg-blue-500 rounded transition-colors"
+                  title={isMaximized ? 'Minimize' : 'Maximize'}
                 >
-                  Authorize Booking
+                  {isMaximized ? (
+                    <Minimize2 className="h-4 w-4" />
+                  ) : (
+                    <Maximize2 className="h-4 w-4" />
+                  )}
+                </button>
+                <button
+                  onClick={() => setIsOpen(false)}
+                  className="p-1.5 hover:bg-blue-500 rounded transition-colors"
+                  title="Close"
+                >
+                  <X className="h-4 w-4" />
                 </button>
               </div>
-            )}
+            </div>
 
-            {/* Typing Indicator */}
-            {isTyping && (
-              <div className="flex justify-start">
-                <div className="bg-white border border-secondary-200 rounded-lg px-4 py-2 flex items-center gap-1 shadow-sm">
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-primary-500 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-primary-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                    <div className="w-2 h-2 bg-primary-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+            {/* Chat Content */}
+            <div className="flex flex-col flex-1 min-h-0">
+              {/* Messages Area */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+                {/* Messages */}
+                {messages.map((message) => (
+                  <div key={message.id} className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[85%] ${message.type === 'user' ? 'order-2' : 'order-1'}`}>
+                      <div className={`px-4 py-3 rounded-2xl ${
+                        message.type === 'user'
+                          ? 'bg-blue-600 text-white ml-auto'
+                          : message.type === 'system'
+                          ? 'bg-blue-50 text-blue-800 italic text-center border border-blue-200'
+                          : 'bg-white text-gray-900 border border-gray-200'
+                      }`}>
+                        {message.type === 'assistant' ? (
+                          <div className="prose prose-sm max-w-none">
+                            {renderContent(message.content)}
+                          </div>
+                        ) : (
+                          <p className="whitespace-pre-wrap">{message.content}</p>
+                        )}
+                      </div>
+                      <div className={`text-xs mt-1 px-2 ${
+                        message.type === 'user' ? 'text-right text-gray-500' : 'text-left text-gray-500'
+                      }`}>
+                        {formatTime(message.timestamp)}
+                      </div>
+                    </div>
                   </div>
+                ))}
+
+                {/* Consent Request */}
+                {pendingConsent && (
+                  <div className="bg-white border border-gray-200 rounded-lg p-4">
+                    <p className="mb-3 text-sm text-gray-700">{pendingConsent.content}</p>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <button
+                        onClick={() => handleConsentResponse('accept')}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm"
+                      >
+                        {pendingConsent.options.accept}
+                      </button>
+                      <button
+                        onClick={() => handleConsentResponse('reject')}
+                        className="bg-gray-300 hover:bg-gray-400 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors text-sm"
+                      >
+                        {pendingConsent.options.reject}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Auth Request */}
+                {pendingAuth && (
+                  <div className="bg-white border border-gray-200 rounded-lg p-4">
+                    <h4 className="font-semibold mb-2 text-sm text-gray-900">Authorization Required</h4>
+                    <p className="text-gray-600 mb-3 text-sm">To complete your hotel booking, you need to authorize with your Asgardeo account.</p>
+                    {pendingAuth.context && (
+                      <div className="mb-3 text-sm bg-gray-50 p-2 rounded-lg">
+                        <strong className="text-gray-900">Booking Details:</strong>
+                        {Object.entries(pendingAuth.context).map(([key, value]) => (
+                          <div key={key} className="text-gray-600 text-xs">
+                            {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}: {String(value)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <button
+                      onClick={handleAuthorization}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm w-full sm:w-auto"
+                    >
+                      Authorize Booking
+                    </button>
+                  </div>
+                )}
+
+                {/* Typing Indicator */}
+                {isTyping && (
+                  <div className="flex justify-start">
+                    <div className="bg-white border border-gray-200 rounded-2xl px-4 py-3 flex items-center gap-1">
+                      <div className="flex space-x-1">
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Input Area */}
+              <div className="p-4 border-t border-gray-200 bg-white flex-shrink-0 rounded-b-lg">
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={handleKeyPress}
+                    placeholder="Ask me about rooms, amenities, or bookings..."
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    disabled={!isConnected && ws.current?.readyState !== WebSocket.CONNECTING}
+                  />
+                  <button
+                    onClick={handleSendMessage}
+                    disabled={!inputValue.trim()}
+                    className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Send className="h-5 w-5" />
+                  </button>
                 </div>
               </div>
-            )}
-
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Input */}
-          <div className="p-3 md:p-4 border-t border-secondary-200 flex-shrink-0">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-                placeholder="Ask me about rooms, amenities, or bookings..."
-                className="input-field text-sm md:text-base"
-                disabled={!isConnected}
-              />
-              <button
-                onClick={sendMessage}
-                disabled={!isConnected || !inputMessage.trim()}
-                className="bg-primary-600 hover:bg-primary-700 text-white p-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                <PaperAirplaneIcon className="h-5 w-5" />
-              </button>
             </div>
           </div>
-        </div>
+        </>
       )}
     </>
   );

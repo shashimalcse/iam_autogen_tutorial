@@ -4,9 +4,8 @@ import { AuthProvider } from "@asgardeo/auth-react";
 import { AsgardeoAuthProvider } from './contexts/AsgardeoAuthContext';
 import asgardeoConfig from './config/asgardeo';
 import HomePage from './pages/HomePage';
-import AsgardeoLoginPage from './pages/AsgardeoLoginPage';
 import EnhancedHotelListPage from './pages/EnhancedHotelListPage';
-import EnhancedHotelDetailPage from './pages/EnhancedHotelDetailPage';
+import { EnhancedHotelDetailPage } from './pages/EnhancedHotelDetailPage';
 import BookingsPage from './pages/BookingsPage';
 import BookingConfirmationPage from './pages/BookingConfirmationPage';
 
@@ -19,21 +18,16 @@ const App: React.FC = () => {
             <Routes>
               {/* Public Routes */}
               <Route path="/" element={<HomePage />} />
-              <Route path="/login" element={<AsgardeoLoginPage />} />
-              
-              Protected Routes
               <Route 
                 path="/hotels" 
-                element={
-                    <EnhancedHotelListPage />
-                } 
+                element={<EnhancedHotelListPage />} 
               />
               <Route 
                 path="/hotels/:id" 
-                element={
-                    <EnhancedHotelDetailPage />
-                } 
+                element={<EnhancedHotelDetailPage />} 
               />
+              
+              {/* Protected Routes */}
               <Route 
                 path="/bookings" 
                 element={
@@ -41,7 +35,7 @@ const App: React.FC = () => {
                 } 
               />
               <Route 
-                path="/bookings/:id" 
+                path="/booking-confirmation" 
                 element={
                     <BookingConfirmationPage />
                 } 
