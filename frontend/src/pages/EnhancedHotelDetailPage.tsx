@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Star, MapPin, Wifi, Car, Coffee, Dumbbell, ArrowLeft, Bed } from 'lucide-react';
 import { EnhancedHeader } from '../components/layout/EnhancedHeader';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { hotelAPI } from '../services/api';
-import { Hotel, Room, Review, SearchParams } from '../types';
+import { Hotel, Room, Review } from '../types';
 import { useAuthContext } from '@asgardeo/auth-react';
+import { useSearch } from '../contexts/SearchContext';
+import { getSriLankaDate, formatDateForInput } from '../utils/dateUtils';
 
 interface HotelDetails extends Hotel {
   rooms: Room[];
@@ -14,8 +16,10 @@ interface HotelDetails extends Hotel {
 export function EnhancedHotelDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const hotelId = parseInt(id!);
   const { state } = useAuthContext();
+  const { searchParams, updateSearchParams } = useSearch(); // Use SearchContext
 
   const [hotel, setHotel] = useState<HotelDetails | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -70,6 +74,23 @@ export function EnhancedHotelDetailPage() {
     const imageIndex = hotelId % fallbackImages.length;
     return fallbackImages[imageIndex];
   };
+
+  // Read URL parameters and update SearchContext
+  useEffect(() => {
+    const urlParams = new URLSearchParams(location.search);
+    const checkIn = urlParams.get('checkIn');
+    const checkOut = urlParams.get('checkOut');
+    const guests = urlParams.get('guests');
+
+    if (checkIn || checkOut || guests) {
+      const updates: any = {};
+      if (checkIn) updates.check_in = checkIn;
+      if (checkOut) updates.check_out = checkOut;
+      if (guests) updates.guests = parseInt(guests);
+
+      updateSearchParams(updates);
+    }
+  }, [location.search, updateSearchParams]);
 
   useEffect(() => {
     const fetchHotelData = async () => {
@@ -219,17 +240,23 @@ export function EnhancedHotelDetailPage() {
     setBookingLoading(true);
 
     try {
-      // Get search params from session storage
-      const searchParamsStr = sessionStorage.getItem('searchParams');
-      const searchParams: SearchParams | null = searchParamsStr ? JSON.parse(searchParamsStr) : null;
+      // Use SearchContext first, then fallback to Sri Lanka current date
+      const today = getSriLankaDate();
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      // Debug: Log current search parameters
+      console.log('Current search parameters from context:', searchParams);
 
       const bookingData = {
         hotel_id: hotelId,
         room_id: room.id,
-        check_in: searchParams?.check_in || new Date().toISOString().split('T')[0],
-        check_out: searchParams?.check_out || new Date(Date.now() + 86400000).toISOString().split('T')[0],
+        check_in: searchParams?.check_in || formatDateForInput(today),
+        check_out: searchParams?.check_out || formatDateForInput(tomorrow),
         guests: searchParams?.guests || 2,
       };
+
+      console.log('Booking data being sent:', bookingData);
 
       const response = await hotelAPI.createBooking(bookingData);
       const booking = response.data;

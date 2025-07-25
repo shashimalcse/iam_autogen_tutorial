@@ -219,3 +219,21 @@ class Error(BaseModel):
     error: str
     message: str
     code: int
+
+# === Admin Schemas ===
+class BookingUpdate(BaseModel):
+    contact_person_id: Optional[int] = None
+    assignment_reason: Optional[str] = None
+
+class AvailableStaff(BaseModel):
+    id: int
+    first_name: str
+    last_name: str
+    role: StaffRoleEnum
+    hotel_id: int
+    current_assignments: int
+    is_available: bool
+
+class AvailableStaffResponse(BaseModel):
+    staff: List[AvailableStaff]
+    total: int

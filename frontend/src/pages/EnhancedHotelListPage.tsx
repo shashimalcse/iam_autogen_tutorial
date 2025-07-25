@@ -8,6 +8,7 @@ import SearchBar from '../components/common/SearchBar';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import ErrorMessage from '../components/common/ErrorMessage';
 import { EnhancedHeader } from '../components/layout/EnhancedHeader';
+import { useSearch } from '../contexts/SearchContext';
 import { 
   FunnelIcon, 
   Squares2X2Icon, 
@@ -19,6 +20,7 @@ const EnhancedHotelListPage: React.FC = () => {
   useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { searchParams: contextSearchParams, updateSearchParams } = useSearch();
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [filteredHotels, setFilteredHotels] = useState<Hotel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -102,13 +104,13 @@ const EnhancedHotelListPage: React.FC = () => {
     setFilteredHotels(filtered);
   }, [hotels, sortBy, filterByLocation]);
 
-  const handleSearch = async (searchParams: SearchParams) => {
+  const handleSearch = async (searchData: SearchParams) => {
     setLoading(true);
     setError(null);
     
     try {
-      console.log('Performing hotel search with params:', searchParams);
-      const response = await hotelAPI.searchHotels(searchParams);
+      console.log('Performing hotel search with params:', searchData);
+      const response = await hotelAPI.searchHotels(searchData);
       const results = response.data;
       
       console.log('Search results:', results);
@@ -116,8 +118,11 @@ const EnhancedHotelListPage: React.FC = () => {
       // Update state with search results
       setHotels(results.hotels || []);
       setFilteredHotels(results.hotels || []);
-      setSearchParams(searchParams);
+      setSearchParams(searchData);
       setIsSearchResults(true);
+      
+      // Update context with search data
+      updateSearchParams(searchData);
       
     } catch (err: any) {
       console.error('Search failed:', err);
@@ -212,7 +217,7 @@ const EnhancedHotelListPage: React.FC = () => {
             <SearchBar 
               onSearch={handleSearch} 
               showDestination={true}
-              initialDestination={searchParams?.location || ''}
+              initialDestination={searchParams?.location || contextSearchParams.location}
               className="bg-white rounded-lg shadow-lg" 
             />
           </div>

@@ -363,6 +363,45 @@ components:
         code:
           type: integer
 
+    # === Admin Schemas ===
+    BookingUpdate:
+      type: object
+      properties:
+        contact_person_id:
+          type: integer
+          nullable: true
+          description: "Staff ID to assign as contact person, null to remove"
+        assignment_reason:
+          type: string
+          description: "Reason for assignment/removal"
+      additionalProperties: false
+
+    AvailableStaffResponse:
+      type: object
+      properties:
+        staff:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              first_name:
+                type: string
+              last_name:
+                type: string
+              role:
+                type: string
+                enum: [concierge, butler, front_desk, housekeeping]
+              hotel_id:
+                type: integer
+              current_assignments:
+                type: integer
+              is_available:
+                type: boolean
+        total:
+          type: integer
+
   securitySchemes:
     BearerAuth:
       type: http
@@ -778,77 +817,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-
-  /api/users/{user_id}/bookings/{booking_id}/reviews:
-    post:
-      summary: Submit review for user's booking
-      operationId: createUserBookingReview
-      security:
-        - BearerAuth: [create_bookings]
-      parameters:
-        - name: user_id
-          in: path
-          required: true
-          schema:   
-            type: string
-            format: uuid
-        - name: booking_id
-          in: path
-          required: true
-          schema:
-            type: integer
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                review_type:
-                  type: string  
-                  enum: [hotel, staff]
-                  default: hotel
-                staff_id:
-                  type: integer
-                  description: "Required if review_type is 'staff'"
-                rating:
-                  type: number
-                  format: float
-                  minimum: 1
-                  maximum: 5
-                title:
-                  type: string
-                comment:
-                  type: string
-                aspects:
-                  type: object
-                would_recommend:
-                  type: boolean
-              required:
-                - review_type
-                - rating
-                - title
-                - comment
-      responses:
-        '201':
-          description: Review created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Review'
-        '400':
-          description: Invalid review data
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '403':
-          description: Insufficient permissions
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-  
   # === Reviews ===
   /api/reviews:
     get:
@@ -975,6 +943,139 @@ paths:
                 $ref: '#/components/schemas/PublicReview'
         '404':
           description: Review not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # === Admin APIs ===
+
+  /api/admin/bookings/{booking_id}:
+    get:
+      summary: Get booking details
+      operationId: getBooking
+      security:
+        - BearerAuth: [admin_read_bookings]
+      parameters:
+        - name: booking_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Booking details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '404':
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      summary: Update booking (assign/remove contact person)
+      operationId: updateBookingAdmin
+      tags:
+        - Admin - Bookings
+      security:
+        - BearerAuth: [admin_update_bookings]
+      parameters:
+        - name: booking_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingUpdate'
+            examples:
+              assign_contact:
+                summary: "Assign Contact Person"
+                value:
+                  contact_person_id: 1
+                  assignment_reason: "VIP guest service"
+              remove_contact:
+                summary: "Remove Contact Person"
+                value:
+                  contact_person_id: null
+      responses:
+        '200':
+          description: Booking updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/admin/staff/available:
+    get:
+      summary: Get available contact persons
+      operationId: getAvailableContactPersons
+      tags:
+        - Admin - Staff
+      security:
+        - BearerAuth: [admin_read_staff]
+      parameters:
+        - name: hotel_id
+          in: query
+          schema:
+            type: integer
+          description: "Filter by hotel ID"
+      responses:
+        '200':
+          description: List of available contact persons
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvailableStaffResponse'
+              example:
+                staff:
+                  - id: 1
+                    first_name: "James"
+                    last_name: "Wilson"
+                    role: "concierge"
+                    hotel_id: 1
+                    current_assignments: 2
+                    is_available: true
+                  - id: 2
+                    first_name: "Sarah"
+                    last_name: "Johnson"
+                    role: "butler"
+                    hotel_id: 1
+                    current_assignments: 1
+                    is_available: true
+                total: 2
+        '403':
+          description: Insufficient permissions
           content:
             application/json:
               schema:

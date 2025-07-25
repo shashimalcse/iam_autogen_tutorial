@@ -3,6 +3,8 @@ import logging
 import os
 import uuid
 import hashlib
+import httpx
+import asyncio
 from fastapi import FastAPI, HTTPException, Depends, Security, APIRouter, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
@@ -10,13 +12,17 @@ from datetime import date, datetime
 from .schemas import *
 from .dependencies import TokenData, validate_token
 from data import (
-    hotels_data, rooms_data, bookings_data, last_booking_id,
+    hotels_data, rooms_data, bookings_data, last_booking_id, last_assignment_id,
     reviews_data, last_review_id, users_data, staff_data
 )
 from .services import scim_service
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Agent service configuration
+AGENT_SERVICE_URL = os.getenv('AGENT_SERVICE_URL', 'http://localhost:8000')
+AGENT_WEBHOOK_TIMEOUT = int(os.getenv('AGENT_WEBHOOK_TIMEOUT', '10'))  # seconds
 
 logging.basicConfig(
     level=logging.INFO,
@@ -156,6 +162,39 @@ async def enrich_booking_with_user_agent_info(booking: dict) -> dict:
     enriched_booking['agent_info'] = agent_info
     
     return enriched_booking
+
+async def fire_auto_assign_webhook(booking_id: int, user_id: str, hotel_id: int, priority: str = "normal") -> None:
+    """Fire webhook to agent service for automatic contact person assignment"""
+    try:
+        webhook_payload = {
+            "event_type": "booking.auto_assign_requested",
+            "booking_id": booking_id,
+            "user_id": user_id,
+            "hotel_id": hotel_id,
+            "priority": priority,
+            "timestamp": datetime.now().isoformat(),
+            "source": "hotel_api"
+        }
+        
+        webhook_url = f"{AGENT_SERVICE_URL}/webhook/auto-assign"
+        
+        async with httpx.AsyncClient(timeout=AGENT_WEBHOOK_TIMEOUT) as client:
+            response = await client.post(
+                webhook_url,
+                json=webhook_payload,
+                headers={"Content-Type": "application/json"}
+            )
+            response.raise_for_status()
+            
+            logger.info(f"Auto-assign webhook fired successfully for booking {booking_id}")
+            logger.debug(f"Webhook response: {response.json()}")
+            
+    except httpx.TimeoutException:
+        logger.error(f"Webhook timeout for booking {booking_id} - agent service may be unavailable")
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Webhook HTTP error for booking {booking_id}: {e.response.status_code} - {e.response.text}")
+    except Exception as e:
+        logger.error(f"Failed to fire auto-assign webhook for booking {booking_id}: {str(e)}")
 
 app = FastAPI(
     title="Hotel API",
@@ -460,6 +499,20 @@ async def create_booking(
     
     bookings_data[last_booking_id] = new_booking
     
+    # Fire webhook for automatic contact person assignment (async, don't wait)
+    # Use priority based on guest count and created_by
+    priority = "high" if booking_request.guests >= 3 or created_by == "agent" else "normal"
+    
+    # Fire webhook in background - don't block the booking response
+    asyncio.create_task(fire_auto_assign_webhook(
+        booking_id=last_booking_id,
+        user_id=user_id,
+        hotel_id=booking_request.hotel_id,
+        priority=priority
+    ))
+    
+    logger.info(f"Booking {last_booking_id} created successfully, auto-assign webhook queued")
+    
     return Booking(**new_booking)
 
 @api_router.get("/bookings/{booking_id}")
@@ -475,10 +528,6 @@ async def get_booking(
         raise HTTPException(status_code=404, detail="Booking not found")
     
     booking = bookings_data[booking_id]
-    
-    # Check access permissions (user can only see their own bookings unless they're an agent)
-    if booking['user_id'] != token_data.sub and 'read_all_bookings' not in token_data.permissions:
-        raise HTTPException(status_code=403, detail="Access denied")
     
     # Enrich booking with user and agent information
     enriched_booking = await enrich_booking_with_user_agent_info(booking)
@@ -498,10 +547,6 @@ async def cancel_booking(
         raise HTTPException(status_code=404, detail="Booking not found")
     
     booking = bookings_data[booking_id]
-    
-    # Check access permissions
-    if booking['user_id'] != token_data.sub and 'cancel_all_bookings' not in token_data.permissions:
-        raise HTTPException(status_code=403, detail="Cannot cancel booking")
     
     if booking['status'] != 'confirmed':
         raise HTTPException(status_code=400, detail="Only confirmed bookings can be cancelled")
@@ -523,10 +568,7 @@ async def get_user_bookings(
     """Get user's bookings"""
     log_request_details(request, token_data, {"user_id": user_id})
     
-    # Check access permissions
-    if user_id != token_data.sub and 'read_all_bookings' not in token_data.permissions:
-        raise HTTPException(status_code=403, detail="Access denied")
-    
+
     user_bookings = []
     for booking in bookings_data.values():
         if booking['user_id'] == user_id:
@@ -562,77 +604,9 @@ async def get_user_booking(
     if booking['user_id'] != user_id:
         raise HTTPException(status_code=404, detail="Booking not found")
     
-    if user_id != token_data.sub and 'read_all_bookings' not in token_data.permissions:
-        raise HTTPException(status_code=403, detail="Access denied")
-    
     # Enrich booking with user and agent information
     enriched_booking = await enrich_booking_with_user_agent_info(booking)
     return enriched_booking
-
-@api_router.post("/users/{user_id}/bookings/{booking_id}/reviews", response_model=Review)
-async def create_user_booking_review(
-    request: Request,
-    user_id: str,
-    booking_id: int,
-    review_request: ReviewCreate,
-    token_data: TokenData = Security(validate_token, scopes=["create_bookings"])
-):
-    """Submit review for user's booking"""
-    log_request_details(request, token_data, {"user_id": user_id, "booking_id": booking_id})
-    
-    global last_review_id
-    
-    # Validate booking exists and belongs to user
-    if booking_id not in bookings_data:
-        raise HTTPException(status_code=404, detail="Booking not found")
-    
-    booking = bookings_data[booking_id]
-    if booking['user_id'] != user_id:
-        raise HTTPException(status_code=404, detail="Booking not found")
-    
-    # Check access permissions
-    if user_id != token_data.sub and 'create_all_reviews' not in token_data.permissions:
-        raise HTTPException(status_code=403, detail="Access denied")
-    
-    # Validate booking is completed
-    if booking['status'] != 'completed':
-        raise HTTPException(status_code=400, detail="Can only review completed bookings")
-    
-    # Check if review already exists for this booking
-    for review in reviews_data.values():
-        if (review['booking_id'] == booking_id and 
-            review['review_type'] == review_request.review_type.value and
-            review.get('staff_id') == review_request.staff_id):
-            raise HTTPException(status_code=400, detail="Review already exists for this booking")
-    
-    # Validate staff_id if reviewing staff
-    if review_request.review_type == ReviewTypeEnum.staff:
-        if not review_request.staff_id:
-            raise HTTPException(status_code=400, detail="staff_id is required for staff reviews")
-        if review_request.staff_id not in staff_data:
-            raise HTTPException(status_code=404, detail="Staff member not found")
-    
-    # Create review
-    last_review_id += 1
-    
-    new_review = {
-        "id": last_review_id,
-        "booking_id": booking_id,
-        "user_id": user_id,
-        "hotel_id": booking['hotel_id'],
-        "staff_id": review_request.staff_id,
-        "review_type": review_request.review_type.value,
-        "rating": review_request.rating,
-        "title": review_request.title,
-        "comment": review_request.comment,
-        "aspects": review_request.aspects.dict() if review_request.aspects else {},
-        "would_recommend": review_request.would_recommend,
-        "created_at": datetime.now()
-    }
-    
-    reviews_data[last_review_id] = new_review
-    
-    return Review(**new_review)
 
 # === Review Endpoints ===
 @api_router.get("/reviews", response_model=ReviewsResponse)
@@ -701,10 +675,6 @@ async def create_review(
     
     booking = bookings_data[review_request.booking_id]
     
-    # Check access permissions
-    if booking['user_id'] != token_data.sub and 'create_all_reviews' not in token_data.permissions:
-        raise HTTPException(status_code=403, detail="Access denied")
-    
     # Validate hotel_id matches booking
     if review_request.hotel_id != booking['hotel_id']:
         raise HTTPException(status_code=400, detail="Hotel ID does not match booking")
@@ -754,50 +724,153 @@ async def get_review(
     
     return PublicReview(**public_review)
 
-# === Staff Review Endpoints ===
-@api_router.get("/staff/{staff_id}/reviews", response_model=StaffReviewsResponse)
-async def get_staff_reviews(
+# === Admin Endpoints ===
+
+@api_router.get("/admin/bookings/{booking_id}")
+async def get_booking_admin(
     request: Request,
-    staff_id: int,
-    limit: int = Query(10, le=50),
-    rating: Optional[float] = Query(None, ge=1, le=5)
+    booking_id: int,
+    token_data: TokenData = Security(validate_token, scopes=["admin_read_bookings"])
 ):
-    """Get reviews for specific staff member - Public endpoint"""
-    logger.info(f"GET /api/staff/{staff_id}/reviews - limit: {limit}, rating: {rating}")
+    """Get booking details"""
+    log_request_details(request, token_data, {"booking_id": booking_id})
     
-    if staff_id not in staff_data:
-        raise HTTPException(status_code=404, detail="Staff member not found")
+    if booking_id not in bookings_data:
+        raise HTTPException(status_code=404, detail="Booking not found")
     
-    staff_member = staff_data[staff_id]
+    booking = bookings_data[booking_id]
     
-    # Filter reviews for this staff member
-    staff_reviews = []
-    for review_data in reviews_data.values():
-        if (review_data.get('staff_id') == staff_id and 
-            review_data['review_type'] == 'staff'):
-            if rating is None or review_data['rating'] >= rating:
-                public_review = convert_review_to_public(review_data)
-                staff_reviews.append(PublicReview(**public_review))
+    return booking
+
+@api_router.patch("/admin/bookings/{booking_id}", response_model=Booking)
+async def update_booking_admin(
+    booking_id: int,
+    booking_update: BookingUpdate,
+    request: Request,
+    token_data: TokenData = Security(validate_token, scopes=["admin_update_bookings"])
+):
+    """Update booking (assign/remove contact person) - Admin endpoint"""
+    global last_assignment_id
     
-    # Sort by creation date (newest first)
-    staff_reviews.sort(key=lambda x: x.created_at, reverse=True)
+    # Enhanced logging
+    log_request_details(request, token_data, {
+        "booking_id": booking_id,
+        "update_data": booking_update.dict(exclude_none=True)
+    })
     
-    # Apply limit
-    limited_reviews = staff_reviews[:limit]
+    # Check if booking exists
+    if booking_id not in bookings_data:
+        logger.warning(f"Booking {booking_id} not found for admin update")
+        raise HTTPException(status_code=404, detail="Booking not found")
     
-    # Create staff summary
-    staff_summary = {
-        "staff_id": staff_id,
-        "staff_name": f"{staff_member['first_name']} {staff_member['last_name']}",
-        "role": staff_member['role'],
-        "average_rating": staff_member['average_rating'],
-        "total_reviews": len(staff_reviews)
-    }
+    booking = bookings_data[booking_id]
     
-    return StaffReviewsResponse(
-        reviews=limited_reviews,
-        staff_summary=staff_summary,
-        total=len(staff_reviews)
+    # Validate staff member if contact_person_id is provided
+    if booking_update.contact_person_id is not None:
+        if booking_update.contact_person_id not in staff_data:
+            logger.warning(f"Staff member {booking_update.contact_person_id} not found")
+            raise HTTPException(status_code=400, detail="Staff member not found")
+        
+        staff_member = staff_data[booking_update.contact_person_id]
+        
+        # Check if staff is available
+        if not staff_member["availability"]["is_available"]:
+            logger.warning(f"Staff member {booking_update.contact_person_id} is not available")
+            raise HTTPException(status_code=400, detail="Staff member is not available")
+        
+        # Remove existing primary contact if any
+        booking["assigned_staff"] = [
+            assignment for assignment in booking["assigned_staff"] 
+            if assignment["assignment_type"] != "primary_contact"
+        ]
+        
+        # Add new assignment
+        last_assignment_id += 1
+        new_assignment = {
+            "id": last_assignment_id,
+            "booking_id": booking_id,
+            "staff_id": booking_update.contact_person_id,
+            "staff_name": f"{staff_member['first_name']} {staff_member['last_name']}",
+            "role": staff_member["role"],
+            "assignment_type": "primary_contact",
+            "assigned_at": datetime.now(),
+            "assigned_by": "admin_agent",
+            "assignment_reason": booking_update.assignment_reason or "Admin assignment"
+        }
+        
+        booking["assigned_staff"].append(new_assignment)
+        
+        # Update staff availability
+        staff_member["availability"]["current_assignments"] += 1
+        
+        logger.info(f"Assigned staff {booking_update.contact_person_id} to booking {booking_id}")
+        
+    elif booking_update.contact_person_id is None:
+        # Remove primary contact
+        removed_assignments = [
+            assignment for assignment in booking["assigned_staff"] 
+            if assignment["assignment_type"] == "primary_contact"
+        ]
+        
+        booking["assigned_staff"] = [
+            assignment for assignment in booking["assigned_staff"] 
+            if assignment["assignment_type"] != "primary_contact"
+        ]
+        
+        # Update staff availability for removed assignments
+        for assignment in removed_assignments:
+            if assignment["staff_id"] in staff_data:
+                staff_data[assignment["staff_id"]]["availability"]["current_assignments"] -= 1
+        
+        logger.info(f"Removed primary contact from booking {booking_id}")
+    
+    # Return enriched booking
+    enriched_booking = await enrich_booking_with_user_agent_info(booking)
+    return Booking(**enriched_booking)
+
+@api_router.get("/admin/staff/available", response_model=AvailableStaffResponse)
+async def get_available_contact_persons(
+    request: Request,
+    hotel_id: Optional[int] = Query(None, description="Filter by hotel ID"),
+    token_data: TokenData = Security(validate_token, scopes=["admin_read_staff"])
+):
+    """Get available contact persons - Admin endpoint"""
+    
+    # Enhanced logging
+    log_request_details(request, token_data, {
+        "hotel_id": hotel_id
+    })
+    
+    # Filter available staff
+    available_staff = []
+    
+    for staff_id, staff_member in staff_data.items():
+        # Apply hotel filter if provided
+        if hotel_id is not None and staff_member["hotel_id"] != hotel_id:
+            continue
+        
+        # Only include available staff with roles suitable for contact person duties
+        suitable_roles = ["concierge", "butler", "front_desk"]
+        if (staff_member["availability"]["is_available"] and 
+            staff_member["role"] in suitable_roles and
+            staff_member["availability"]["current_assignments"] < 5):  # Max 5 assignments
+            
+            available_staff.append(AvailableStaff(
+                id=staff_member["id"],
+                first_name=staff_member["first_name"],
+                last_name=staff_member["last_name"],
+                role=staff_member["role"],
+                hotel_id=staff_member["hotel_id"],
+                current_assignments=staff_member["availability"]["current_assignments"],
+                is_available=staff_member["availability"]["is_available"]
+            ))
+    
+    logger.info(f"Found {len(available_staff)} available staff members" + 
+                (f" for hotel {hotel_id}" if hotel_id else ""))
+    
+    return AvailableStaffResponse(
+        staff=available_staff,
+        total=len(available_staff)
     )
 
 # Include the router in the main app

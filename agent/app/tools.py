@@ -57,8 +57,26 @@ async def _post(base_url: str, path: str, bearer_token: str, data: dict = None, 
         return response.json()
 
 
-async def fetch_hotels(token: OAuthToken, city: str = None, brand: str = None, amenities: list = None, limit: int = 20, offset: int = 0) -> dict:
-    print("\n\nAgent token: ", token.access_token)
+async def _patch(base_url: str, path: str, bearer_token: str, data: dict = None, params: dict = None) -> dict:
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    
+    # Only add Authorization header if token is provided and not empty
+    if bearer_token and bearer_token.strip():
+        headers["Authorization"] = f"Bearer {bearer_token}"
+
+    url = f"{base_url.rstrip('/')}/{path.lstrip('/')}"
+
+    async with httpx.AsyncClient() as client:
+        response = await client.patch(url, headers=headers, json=data, params=params)
+        response.raise_for_status()
+        return response.json()
+
+
+async def fetch_hotels(token: OAuthToken = None, city: str = None, brand: str = None, amenities: list = None, limit: int = 20, offset: int = 0) -> dict:
+
     path = "api/hotels"
     params = {}
     if city:
@@ -71,12 +89,15 @@ async def fetch_hotels(token: OAuthToken, city: str = None, brand: str = None, a
         params['limit'] = limit
     if offset:
         params['offset'] = offset
-    return await _get(hotel_api_base_url, path, token.access_token, params)
+    bearer_token = token.access_token if token else ""
+    return await _get(hotel_api_base_url, path, bearer_token, params)
 
 
-async def fetch_hotel_details(hotel_id: int, token: OAuthToken) -> dict:
+async def fetch_hotel_details(hotel_id: int, token: OAuthToken = None) -> dict:
+
     path = f"api/hotels/{hotel_id}"
-    return await _get(hotel_api_base_url, path, token.access_token)
+    bearer_token = token.access_token if token else ""
+    return await _get(hotel_api_base_url, path, bearer_token)
 
 
 async def make_booking(hotel_id: int, room_id: int, check_in: str, check_out: str, guests: int,
@@ -135,9 +156,10 @@ async def fetch_hotel_reviews(hotel_id: int, limit: int = 10, rating: float = No
 
 # === BOOKING ENDPOINTS ===
 
-async def get_booking(booking_id: int, token: OAuthToken) -> dict:
+async def get_booking(booking_id: int, token: OAuthToken = None) -> dict:
     path = f"api/bookings/{booking_id}"
-    return await _get(hotel_api_base_url, path, token.access_token)
+    bearer_token = token.access_token if token else ""
+    return await _get(hotel_api_base_url, path, bearer_token)
 
 
 async def cancel_booking(booking_id: int, reason: str = None, token: OAuthToken = None) -> dict:
@@ -191,3 +213,61 @@ async def get_review(review_id: int, token: OAuthToken = None) -> dict:
     # This is a public endpoint, but include token if available
     bearer_token = token.access_token if token else ""
     return await _get(hotel_api_base_url, path, bearer_token)
+
+
+# === ADMIN ENDPOINTS ===
+
+async def update_booking_admin(booking_id: int, contact_person_id: int, token: OAuthToken = None) -> dict:
+    """
+    Update booking to assign the contact person (admin endpoint).
+    
+    Args:
+        booking_id: ID of the booking to update
+        contact_person_id: Staff ID to assign as contact person
+        token: OAuth token for authorization
+    
+    Returns:
+        Updated the contact person of the booking
+    """
+    path = f"api/admin/bookings/{booking_id}"
+    data = {}
+    
+    if contact_person_id is not None:
+        data["contact_person_id"] = contact_person_id
+    else:
+        data["contact_person_id"] = None
+        
+    return await _patch(hotel_api_base_url, path, token.access_token, data)
+
+
+async def get_available_staff(hotel_id: int = None, token: OAuthToken = None) -> dict:
+    """
+    Get available contact persons for assignment to bookings (admin endpoint).
+    
+    Args:
+        hotel_id: Optional hotel ID to filter staff by specific hotel
+        token: OAuth token for authorization
+    
+    Returns:
+        List of available staff members who can be assigned as contact persons
+    """
+    path = "api/admin/staff/available"
+    params = {}
+    if hotel_id:
+        params["hotel_id"] = hotel_id
+    
+    return await _get(hotel_api_base_url, path, token.access_token, params)
+
+async def get_booking_admin(booking_id: str, token: OAuthToken = None) -> dict:
+    """
+    Get booking details by ID (admin endpoint).
+    
+    Args:
+        booking_id: ID of the booking to retrieve
+        token: OAuth token for authorization
+
+    Returns:
+        Booking details
+    """
+    path = f"api/admin/bookings/{booking_id}"
+    return await _get(hotel_api_base_url, path, token.access_token)

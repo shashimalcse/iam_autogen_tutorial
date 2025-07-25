@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from "@asgardeo/auth-react";
 import { AsgardeoAuthProvider } from './contexts/AsgardeoAuthContext';
+import { SearchProvider } from './contexts/SearchContext';
 import asgardeoConfig from './config/asgardeo';
 import HomePage from './pages/HomePage';
 import EnhancedHotelListPage from './pages/EnhancedHotelListPage';
@@ -13,7 +14,8 @@ const App: React.FC = () => {
   return (
     <AuthProvider config={asgardeoConfig}>
       <AsgardeoAuthProvider>
-        <Router>
+        <SearchProvider>
+          <Router>
           <div className="App">
             <Routes>
               {/* Public Routes */}
@@ -45,7 +47,8 @@ const App: React.FC = () => {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </div>
-        </Router>
+          </Router>
+        </SearchProvider>
       </AsgardeoAuthProvider>
     </AuthProvider>
   );

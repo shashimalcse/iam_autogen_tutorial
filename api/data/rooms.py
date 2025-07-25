@@ -12,10 +12,6 @@ rooms_data = {
             "max_occupancy": 2,
             "size_sqft": 350,
             "amenities": ["Air Conditioning", "Free WiFi", "Safe", "Mini Fridge", "Coffee Maker"],
-            "images": [
-                "https://example.com/saman-villa/standard-room.jpg",
-                "https://example.com/saman-villa/standard-bathroom.jpg"
-            ],
             "base_price": 69.99
         },
         2: {
@@ -26,10 +22,6 @@ rooms_data = {
             "max_occupancy": 2,
             "size_sqft": 450,
             "amenities": ["Air Conditioning", "Mini Bar", "Free WiFi", "Safe", "Garden View", "Balcony"],
-            "images": [
-                "https://example.com/saman-villa/deluxe-room.jpg",
-                "https://example.com/saman-villa/deluxe-view.jpg"
-            ],
             "base_price": 99.99
         },
         3: {
@@ -40,10 +32,6 @@ rooms_data = {
             "max_occupancy": 3,
             "size_sqft": 550,
             "amenities": ["Air Conditioning", "Mini Bar", "Free WiFi", "Safe", "Bathtub", "Sea View", "Premium Linens"],
-            "images": [
-                "https://example.com/saman-villa/super-deluxe-room.jpg",
-                "https://example.com/saman-villa/super-deluxe-bathroom.jpg"
-            ],
             "base_price": 149.50
         }
     },
@@ -56,10 +44,6 @@ rooms_data = {
             "max_occupancy": 2,
             "size_sqft": 300,
             "amenities": ["Air Conditioning", "Free WiFi", "Work Desk", "City View"],
-            "images": [
-                "https://example.com/colombo-seven/standard-room.jpg",
-                "https://example.com/colombo-seven/standard-view.jpg"
-            ],
             "base_price": 89.99
         },
         5: {
@@ -70,10 +54,6 @@ rooms_data = {
             "max_occupancy": 3,
             "size_sqft": 500,
             "amenities": ["Air Conditioning", "Mini Bar", "Free WiFi", "Safe", "Bathtub", "City View", "Premium Amenities"],
-            "images": [
-                "https://example.com/colombo-seven/super-deluxe-room.jpg",
-                "https://example.com/colombo-seven/super-deluxe-bathroom.jpg"
-            ],
             "base_price": 199.50
         },
         6: {
@@ -84,10 +64,6 @@ rooms_data = {
             "max_occupancy": 4,
             "size_sqft": 650,
             "amenities": ["Air Conditioning", "Kitchen", "Free WiFi", "Safe", "Washing Machine", "City View", "Living Area"],
-            "images": [
-                "https://example.com/colombo-seven/studio-room.jpg",
-                "https://example.com/colombo-seven/studio-kitchen.jpg"
-            ],
             "base_price": 299.99
         }
     },
@@ -100,10 +76,6 @@ rooms_data = {
             "max_occupancy": 2,
             "size_sqft": 400,
             "amenities": ["Air Conditioning", "Mini Bar", "Free WiFi", "Safe", "Mountain View", "Traditional Decor"],
-            "images": [
-                "https://example.com/kandy-hills/deluxe-room.jpg",
-                "https://example.com/kandy-hills/deluxe-view.jpg"
-            ],
             "base_price": 179.99
         },
         8: {
@@ -114,10 +86,6 @@ rooms_data = {
             "max_occupancy": 4,
             "size_sqft": 600,
             "amenities": ["Air Conditioning", "Kitchen", "Free WiFi", "Safe", "Washing Machine", "Valley View", "Seating Area"],
-            "images": [
-                "https://example.com/kandy-hills/studio-room.jpg",
-                "https://example.com/kandy-hills/studio-balcony.jpg"
-            ],
             "base_price": 259.99
         }
     },
@@ -130,10 +98,6 @@ rooms_data = {
             "max_occupancy": 2,
             "size_sqft": 450,
             "amenities": ["Air Conditioning", "Mini Bar", "Free WiFi", "Safe", "Ocean View", "Beach Access"],
-            "images": [
-                "https://example.com/galle-beach/deluxe-room.jpg",
-                "https://example.com/galle-beach/deluxe-ocean.jpg"
-            ],
             "base_price": 199.99
         },
         10: {
@@ -144,10 +108,6 @@ rooms_data = {
             "max_occupancy": 3,
             "size_sqft": 600,
             "amenities": ["Air Conditioning", "Mini Bar", "Free WiFi", "Safe", "Bathtub", "Ocean View", "Private Balcony", "Beach Access"],
-            "images": [
-                "https://example.com/galle-beach/super-deluxe-room.jpg",
-                "https://example.com/galle-beach/super-deluxe-balcony.jpg"
-            ],
             "base_price": 299.50
         }
     }

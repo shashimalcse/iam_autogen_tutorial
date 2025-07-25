@@ -9,6 +9,7 @@ import {
   DocumentTextIcon
 } from '@heroicons/react/24/outline';
 import { RoomBasic, BookingCreate } from '../../types';
+import { useSearch } from '../../contexts/SearchContext';
 
 interface EnhancedBookingFormProps {
   room: RoomBasic;
@@ -31,8 +32,9 @@ const EnhancedBookingForm: React.FC<EnhancedBookingFormProps> = ({
   initialCheckIn,
   initialCheckOut
 }) => {
-  const [checkIn, setCheckIn] = useState(initialCheckIn || format(new Date(), 'yyyy-MM-dd'));
-  const [checkOut, setCheckOut] = useState(initialCheckOut || format(new Date(Date.now() + 86400000), 'yyyy-MM-dd'));
+  const { searchParams } = useSearch();
+  const [checkIn, setCheckIn] = useState(initialCheckIn || searchParams.check_in);
+  const [checkOut, setCheckOut] = useState(initialCheckOut || searchParams.check_out);
   const [guestCount, setGuestCount] = useState(1);
   const [guestDetails, setGuestDetails] = useState({
     firstName: '',

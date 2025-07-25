@@ -12,6 +12,8 @@
 
 import logging
 import os
+import uuid
+import asyncio
 from typing import Literal, Dict
 
 from fastapi.responses import HTMLResponse
@@ -26,10 +28,11 @@ from pydantic import BaseModel
 from starlette.responses import HTMLResponse
 from starlette.websockets import WebSocketDisconnect
 
-from app.prompt import agent_system_prompt
+from app.prompt import agent_system_prompt, admin_agent_system_prompt
 from app.tools import (
     fetch_hotels, fetch_hotel_details, make_booking, search_hotels, fetch_hotel_reviews,
-    get_booking, cancel_booking, fetch_reviews, create_review, get_review
+    get_review, fetch_reviews,
+    update_booking_admin, get_available_staff, get_booking_admin
 )
 from autogen.tool import SecureFunctionTool
 from auth import AuthRequestMessage, AutogenAuthManager, AuthSchema, AuthConfig, OAuthTokenType
@@ -49,10 +52,15 @@ client_secret = os.environ.get('ASGARDEO_CLIENT_SECRET')
 base_url = os.environ.get('ASGARDEO_BASE_URL')
 redirect_uri = os.environ.get('ASGARDEO_REDIRECT_URI', 'http://localhost:8000/callback')
 
-# Agent related configurations
+# Interactive booking agent configurations
 agent_id = os.environ.get('AGENT_ID')
 agent_name = os.environ.get('AGENT_NAME')
 agent_secret = os.environ.get('AGENT_SECRET')
+
+# Background assignment agent configurations (separate identity)
+background_agent_id = os.environ.get('BACKGROUND_AGENT_ID')
+background_agent_name = os.environ.get('BACKGROUND_AGENT_NAME')
+background_agent_secret = os.environ.get('BACKGROUND_AGENT_SECRET')
 
 server_config = ServerConfig(
     base_url=base_url
@@ -64,10 +72,18 @@ client_config = ClientConfig(
     redirect_uri=redirect_uri
 )
 
+# Interactive booking agent config
 agent_config = AgentConfig(
     agent_id=agent_id,
     agent_name=agent_name,
     agent_secret=agent_secret,
+)
+
+# Background assignment agent config (separate identity)
+background_agent_config = AgentConfig(
+    agent_id=background_agent_id,
+    agent_name=background_agent_name,
+    agent_secret=background_agent_secret,
 )
 
 # Azure OpenAI configs
@@ -75,12 +91,29 @@ azure_openai_endpoint = os.environ.get('AZURE_OPENAI_ENDPOINT')
 deployment_name = os.environ.get('AZURE_OPENAI_DEPLOYMENT_NAME')
 azure_openai_api_version = os.environ.get('AZURE_OPENAI_API_VERSION')
 
+google_api_key = os.environ.get('GOOGLE_API_KEY')
+
 app = FastAPI()
 
 
 class TextResponse(BaseModel):
     type: Literal["message"] = "message"
     content: str
+
+class AutoAssignWebhook(BaseModel):
+    event_type: str
+    booking_id: int
+    user_id: str
+    hotel_id: int
+    priority: str = "normal"
+    timestamp: str
+    source: str = "hotel_api"
+
+class WebhookResponse(BaseModel):
+    task_id: str
+    status: str
+    message: str
+    estimated_completion: str
 
 
 model_client = AzureOpenAIChatCompletionClient(
@@ -115,6 +148,81 @@ async def run_agent(assistant: AssistantAgent, websocket: WebSocket):
         # Send the response back to the client
         await websocket.send_json(TextResponse(content=response.chat_message.content).model_dump())
 
+async def run_background_agent_for_assignment(webhook_data: AutoAssignWebhook, task_id: str) -> None:
+    """Create and run a background agent for contact person assignment"""
+    try:
+        logger.info(f"Starting background agent task {task_id} for booking {webhook_data.booking_id}")
+        
+        # Check if background agent config is available
+        if background_agent_config is None:
+            logger.error(f"Background agent not configured. Task {task_id} cannot proceed.")
+            raise Exception("Background agent credentials not configured")
+        
+        # Create a background auth manager instance with separate agent identity
+        background_auth_manager = AutogenAuthManager(
+            server_config=server_config,
+            client_config=client_config,
+            agent_config=background_agent_config,  # Use separate background agent config
+            message_handler=None  # No message handler for background tasks
+        )
+        
+        
+        get_booking_admin_tool = SecureFunctionTool(
+            get_booking_admin,
+            description="Get user's booking history to analyze past contact person assignments and preferences",
+            name="GetUserBookingsTool",
+            auth=AuthSchema(background_auth_manager, AuthConfig(
+                scopes=["admin_read_bookings"],
+                token_type=OAuthTokenType.AGENT_TOKEN,
+                resource="booking_api"
+            ))
+        )
+        
+        update_booking_tool = SecureFunctionTool(
+            update_booking_admin,
+            description="Assign Contact Person by Updating the booking",
+            name="UpdateBookingTool",
+            auth=AuthSchema(background_auth_manager, AuthConfig(
+                scopes=["admin_update_bookings"],
+                token_type=OAuthTokenType.AGENT_TOKEN,
+                resource="booking_api"
+            ))
+        )
+        
+        get_available_staff_tool = SecureFunctionTool(
+            get_available_staff,
+            description="Get available staff for booking assignments",
+            name="GetAvailableStaffTool",
+            auth=AuthSchema(background_auth_manager, AuthConfig(
+                scopes=["admin_read_staff"],
+                token_type=OAuthTokenType.AGENT_TOKEN,
+                resource="booking_api"
+            ))
+        )
+    
+        # Create a specialized agent for assignment tasks
+        assignment_agent = AssistantAgent(
+            "hotel_admin_assistant",
+            model_client=model_client,
+            tools=[
+                get_booking_admin_tool,
+                update_booking_tool,
+                get_available_staff_tool
+            ],
+            reflect_on_tool_use=True,
+            system_message=admin_agent_system_prompt
+            )
+
+        response = await assignment_agent.run(task=f"Assign contact person id 1 for booking id : {webhook_data.booking_id}")
+
+        print(response.messages)
+        print(f"Final Response: {response.messages[-1].content}")
+
+        logger.info(f"Background agent task {task_id} completed successfully")
+        
+    except Exception as e:
+        logger.error(f"Background agent task {task_id} failed: {str(e)}", exc_info=True)     
+
 @app.websocket("/chat")
 async def websocket_endpoint(websocket: WebSocket, session_id: str):
     """WebSocket endpoint for chat functionality"""
@@ -138,7 +246,6 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
     # Create the set of tools required
     
-    # === PUBLIC HOTEL TOOLS (No Auth Required) ===
     fetch_hotels_tool = SecureFunctionTool(
         fetch_hotels,
         description="Fetches all hotels with optional filters (city, brand, amenities, etc.)",
@@ -163,7 +270,6 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         name="FetchHotelReviewsTool"
     )
     
-    # === PUBLIC REVIEW TOOLS ===
     fetch_reviews_tool = SecureFunctionTool(
         fetch_reviews,
         description="Fetch all reviews with optional filters",
@@ -176,7 +282,6 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         name="GetReviewTool"
     )
 
-    # === PROTECTED BOOKING TOOLS (Auth Required) ===
     book_hotel_tool = SecureFunctionTool(
         make_booking,
         description="Books the hotel room selected by the user",
@@ -188,40 +293,6 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         ))
     )
     
-    get_booking_tool = SecureFunctionTool(
-        get_booking,
-        description="Get details of a specific booking",
-        name="GetBookingTool",
-        auth=AuthSchema(auth_manager, AuthConfig(
-            scopes=["read_bookings"],
-            token_type=OAuthTokenType.OBO_TOKEN,
-            resource="booking_api"
-        ))
-    )
-    
-    cancel_booking_tool = SecureFunctionTool(
-        cancel_booking,
-        description="Cancel a specific booking",
-        name="CancelBookingTool",
-        auth=AuthSchema(auth_manager, AuthConfig(
-            scopes=["cancel_bookings"],
-            token_type=OAuthTokenType.OBO_TOKEN,
-            resource="booking_api"
-        ))
-    )
-    
-    # === PROTECTED REVIEW TOOLS ===
-    create_review_tool = SecureFunctionTool(
-        create_review,
-        description="Create a review for a booking",
-        name="CreateReviewTool",
-        auth=AuthSchema(auth_manager, AuthConfig(
-            scopes=["create_bookings"],
-            token_type=OAuthTokenType.OBO_TOKEN,
-            resource="booking_api"
-        ))
-    )
-
     # Create a agent instance for the chat session
     hotel_assistant = AssistantAgent(
         "hotel_booking_assistant",
@@ -237,10 +308,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             get_review_tool,
             # Protected Booking Tools
             book_hotel_tool,
-            # get_booking_tool,
-            # cancel_booking_tool,
-            # # Protected Review Tools
-            # create_review_tool
+
         ],
         reflect_on_tool_use=True,
         system_message=agent_system_prompt)
@@ -331,3 +399,36 @@ async def callback(
     except Exception as e:
         logger.error(f"Error in callback: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/webhook/auto-assign")
+async def auto_assign_webhook(webhook_data: AutoAssignWebhook):
+    """Webhook endpoint to receive auto-assignment requests from the booking API"""
+    try:
+        # Validate event type
+        if webhook_data.event_type != "booking.auto_assign_requested":
+            raise HTTPException(status_code=400, detail="Invalid event type")
+        
+        # Generate unique task ID
+        task_id = str(uuid.uuid4())
+        
+        # Calculate estimated completion time (2-5 minutes from now)
+        import datetime
+        estimated_completion = datetime.datetime.now() + datetime.timedelta(minutes=3)
+        
+        # Create background task for assignment
+        asyncio.create_task(run_background_agent_for_assignment(webhook_data, task_id))
+        
+        logger.info(f"Auto-assignment task {task_id} queued for booking {webhook_data.booking_id}")
+        
+        return WebhookResponse(
+            task_id=task_id,
+            status="queued",
+            message=f"Background agent task queued for contact person assignment",
+            estimated_completion=estimated_completion.isoformat()
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Webhook processing failed: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to process webhook")
