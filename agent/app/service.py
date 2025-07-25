@@ -237,10 +237,10 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             get_review_tool,
             # Protected Booking Tools
             book_hotel_tool,
-            get_booking_tool,
-            cancel_booking_tool,
-            # Protected Review Tools
-            create_review_tool
+            # get_booking_tool,
+            # cancel_booking_tool,
+            # # Protected Review Tools
+            # create_review_tool
         ],
         reflect_on_tool_use=True,
         system_message=agent_system_prompt)

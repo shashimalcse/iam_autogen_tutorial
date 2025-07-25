@@ -118,6 +118,17 @@ const BookingsPage: React.FC = () => {
                           <p className="text-gray-600">
                             Room {booking.room_id} • {booking.room_type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                           </p>
+                          {/* Agent Indicator */}
+                          {booking.created_by === 'agent' && booking.agent_info && (
+                            <div className="flex items-center gap-1 mt-1">
+                              <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                              </svg>
+                              <span className="text-sm text-blue-600 font-medium">
+                                Booked by {booking.agent_info.display_name || 'Agent'}
+                              </span>
+                            </div>
+                          )}
                         </div>
                         <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
                           Confirmed
@@ -151,15 +162,32 @@ const BookingsPage: React.FC = () => {
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-gray-600">Guest Name:</span>
-                                  <span className="font-medium">{user?.given_name || 'N/A'}</span>
+                                  <span className="font-medium">
+                                    {booking.user_info?.display_name || booking.user_info?.first_name || user?.given_name || 'N/A'}
+                                  </span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-gray-600">Number of Guests:</span>
-                                  <span className="font-medium">2 Adults</span>
+                                  <span className="font-medium">{booking.guests} {booking.guests === 1 ? 'Guest' : 'Guests'}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Booked By:</span>
+                                  <span className="font-medium">
+                                    {booking.created_by === 'agent' ? (
+                                      <span className="flex items-center gap-1 text-blue-600">
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                        </svg>
+                                        {booking.agent_info?.display_name || 'Agent'}
+                                      </span>
+                                    ) : (
+                                      'Direct Booking'
+                                    )}
+                                  </span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-gray-600">Special Requests:</span>
-                                  <span className="font-medium">None</span>
+                                  <span className="font-medium">{booking.special_requests?.length > 0 ? booking.special_requests.join(', ') : 'None'}</span>
                                 </div>
                               </div>
                             </div>
@@ -188,18 +216,66 @@ const BookingsPage: React.FC = () => {
                             </div>
                           </div>
                           
+                          {/* Agent Information - Only show for agent bookings */}
+                          {booking.created_by === 'agent' && booking.agent_info && (
+                            <div className="pt-4 border-t border-gray-100">
+                              <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                                Agent Information
+                              </h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Agent Name:</span>
+                                  <span className="font-medium text-blue-600">{booking.agent_info.display_name || 'N/A'}</span>
+                                </div>
+                                {booking.agent_info.ai_model && (
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">AI Model:</span>
+                                    <span className="font-medium">{booking.agent_info.ai_model}</span>
+                                  </div>
+                                )}
+                                {booking.agent_info.source && (
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Source:</span>
+                                    <span className="font-medium capitalize">{booking.agent_info.source.replace('_', ' ')}</span>
+                                  </div>
+                                )}
+                              </div>
+                              {booking.agent_info.description && (
+                                <div className="mt-3">
+                                  <span className="text-gray-600 text-sm">Description:</span>
+                                  <p className="text-sm text-gray-800 mt-1 italic">{booking.agent_info.description}</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
                           {/* Contact Information */}
                           <div className="pt-4 border-t border-gray-100">
                             <h4 className="font-semibold text-gray-900 mb-3">Contact Information</h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                               <div className="flex justify-between">
                                 <span className="text-gray-600">Email:</span>
-                                <span className="font-medium">{user?.email || 'N/A'}</span>
+                                <span className="font-medium">
+                                  {booking.user_info?.email || user?.email || 'N/A'}
+                                </span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-gray-600">Phone:</span>
-                                <span className="font-medium">+94 77 123 4567</span>
+                                <span className="font-medium">
+                                  {booking.user_info?.phone || '+94 77 123 4567'}
+                                </span>
                               </div>
+                              {booking.user_info?.loyalty_tier && (
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Loyalty Tier:</span>
+                                  <span className="font-medium capitalize text-blue-600">
+                                    {booking.user_info.loyalty_tier}
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           </div>
 

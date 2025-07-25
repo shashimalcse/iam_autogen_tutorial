@@ -73,6 +73,30 @@ export interface StaffAssignment {
   assignment_reason: string;
 }
 
+export interface UserInfo {
+  id: string;
+  email?: string;
+  first_name?: string;
+  last_name?: string;
+  display_name?: string;
+  phone?: string;
+  loyalty_tier?: string;
+  source: 'asgardeo_scim' | 'local_data';
+}
+
+export interface AgentInfo {
+  id: string;
+  display_name?: string;
+  description?: string;
+  ai_model?: string;
+  owner?: string;
+  email?: string;
+  first_name?: string;
+  last_name?: string;
+  phone?: string;
+  source: 'asgardeo_scim' | 'local_data';
+}
+
 export interface Booking {
   id: number;
   confirmation_number: string;
@@ -91,6 +115,8 @@ export interface Booking {
   created_by: 'user' | 'agent';
   agent_id?: string;
   assigned_staff: StaffAssignment[];
+  user_info?: UserInfo;
+  agent_info?: AgentInfo;
 }
 
 // === API Response Types ===

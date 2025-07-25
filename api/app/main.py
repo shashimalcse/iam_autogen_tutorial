@@ -13,6 +13,7 @@ from data import (
     hotels_data, rooms_data, bookings_data, last_booking_id,
     reviews_data, last_review_id, users_data, staff_data
 )
+from .services import scim_service
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -92,34 +93,63 @@ def convert_review_to_public(review: dict) -> dict:
     public_review['reviewer_name'] = anonymize_reviewer_name(review['user_id'])
     return public_review
 
-def enrich_booking_with_user_agent_info(booking: dict) -> dict:
-    """Enrich booking data with user and agent details"""
+async def enrich_booking_with_user_agent_info(booking: dict) -> dict:
+    """Enrich booking data with user and agent details from Asgardeo SCIM API"""
     enriched_booking = booking.copy()
     
     # Add user details
     user_info = None
-    if booking.get('user_id') and booking['user_id'] in users_data:
-        user_data = users_data[booking['user_id']]
-        user_info = {
-            "id": user_data['id'],
-            "email": user_data['email'],
-            "first_name": user_data['first_name'],
-            "last_name": user_data['last_name'],
-            "phone": user_data.get('phone'),
-            "loyalty_tier": user_data.get('loyalty_tier')
-        }
+    if booking.get('user_id'):
+        # Try SCIM API first, fallback to local data
+        scim_user = await scim_service.get_user_info(booking['user_id'])
+        if scim_user:
+            user_info = {
+                "id": scim_user['id'],
+                "email": scim_user['email'],
+                "first_name": scim_user['first_name'],
+                "last_name": scim_user['last_name'],
+                "display_name": scim_user['display_name'],
+                "source": scim_user['source']
+            }
+        elif booking['user_id'] in users_data:
+            # Fallback to local data
+            user_data = users_data[booking['user_id']]
+            user_info = {
+                "id": user_data['id'],
+                "email": user_data['email'],
+                "first_name": user_data['first_name'],
+                "last_name": user_data['last_name'],
+                "display_name": f"{user_data['first_name']} {user_data['last_name']}",
+                "phone": user_data.get('phone'),
+                "loyalty_tier": user_data.get('loyalty_tier'),
+                "source": "local_data"
+            }
     
     # Add agent details
     agent_info = None
-    if booking.get('agent_id') and booking['agent_id'] in users_data:
-        agent_data = users_data[booking['agent_id']]
-        agent_info = {
-            "id": agent_data['id'],
-            "email": agent_data['email'],
-            "first_name": agent_data['first_name'],
-            "last_name": agent_data['last_name'],
-            "phone": agent_data.get('phone')
-        }
+    if booking.get('agent_id'):
+        # Try SCIM API first, fallback to local data
+        scim_agent = await scim_service.get_agent_info(booking['agent_id'])
+        if scim_agent:
+            agent_info = {
+                "id": scim_agent['id'],
+                "display_name": scim_agent['display_name'],
+                "description": scim_agent['description'],
+                "ai_model": scim_agent['ai_model'],
+                "source": scim_agent['source']
+            }
+        elif booking['agent_id'] in users_data:
+            # Fallback to local data (treating as user for backward compatibility)
+            agent_data = users_data[booking['agent_id']]
+            agent_info = {
+                "id": agent_data['id'],
+                "email": agent_data['email'],
+                "first_name": agent_data['first_name'],
+                "last_name": agent_data['last_name'],
+                "display_name": f"{agent_data['first_name']} {agent_data['last_name']}",
+                "phone": agent_data.get('phone'),
+                "source": "local_data"
+            }
     
     # Add enriched data to booking
     enriched_booking['user_info'] = user_info
@@ -451,7 +481,7 @@ async def get_booking(
         raise HTTPException(status_code=403, detail="Access denied")
     
     # Enrich booking with user and agent information
-    enriched_booking = enrich_booking_with_user_agent_info(booking)
+    enriched_booking = await enrich_booking_with_user_agent_info(booking)
     return enriched_booking
 
 @api_router.post("/bookings/{booking_id}/cancel", response_model=Booking)
@@ -502,7 +532,7 @@ async def get_user_bookings(
         if booking['user_id'] == user_id:
             if status is None or booking['status'] == status.value:
                 # Enrich booking with user and agent information
-                enriched_booking = enrich_booking_with_user_agent_info(booking)
+                enriched_booking = await enrich_booking_with_user_agent_info(booking)
                 user_bookings.append(enriched_booking)
     
     # Sort by creation date (newest first)
@@ -536,7 +566,7 @@ async def get_user_booking(
         raise HTTPException(status_code=403, detail="Access denied")
     
     # Enrich booking with user and agent information
-    enriched_booking = enrich_booking_with_user_agent_info(booking)
+    enriched_booking = await enrich_booking_with_user_agent_info(booking)
     return enriched_booking
 
 @api_router.post("/users/{user_id}/bookings/{booking_id}/reviews", response_model=Review)
@@ -782,3 +812,11 @@ async def root():
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+
+@app.get("/cache/stats")
+async def get_cache_stats():
+    """Get SCIM cache statistics for monitoring"""
+    return {
+        "scim_cache": scim_service.get_cache_stats(),
+        "timestamp": datetime.now().isoformat()
+    }
