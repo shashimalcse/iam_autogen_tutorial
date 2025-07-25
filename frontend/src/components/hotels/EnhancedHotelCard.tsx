@@ -127,7 +127,7 @@ const EnhancedHotelCard: React.FC<EnhancedHotelCardProps> = ({
           </div>
           <div className="text-right">
             <span className="text-lg font-bold">
-              LKR {Math.round(hotel.price_range.min * 300).toLocaleString()}
+              ${Math.round(hotel.price_range.min).toLocaleString()}
             </span>
             <p className="text-sm text-gray-600">per night</p>
           </div>

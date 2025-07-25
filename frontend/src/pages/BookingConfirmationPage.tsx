@@ -106,7 +106,7 @@ export function BookingConfirmationPage() {
               <div className="border-t pt-4">
                 <div className="flex justify-between text-lg font-bold">
                   <span>Total Amount:</span>
-                  <span>LKR {booking.total_amount?.toLocaleString()}</span>
+                  <span>${booking.total_amount?.toLocaleString()}</span>
                 </div>
               </div>
             </div>

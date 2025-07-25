@@ -14,6 +14,7 @@ const BookingsPage: React.FC = () => {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedBooking, setExpandedBooking] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchBookings = async () => {
@@ -40,7 +41,10 @@ const BookingsPage: React.FC = () => {
         <EnhancedHeader />
         <div className="container mx-auto px-4 py-8">
           <div className="flex justify-center items-center h-64">
-            <LoadingSpinner size="lg" />
+            <div className="text-center space-y-4">
+              <LoadingSpinner size="lg" />
+              <p className="text-gray-600 font-medium">Loading your bookings...</p>
+            </div>
           </div>
         </div>
       </div>
@@ -52,7 +56,9 @@ const BookingsPage: React.FC = () => {
       <div className="min-h-screen bg-white">
         <EnhancedHeader />
         <div className="container mx-auto px-4 py-8">
-          <ErrorMessage message={error} />
+          <div className="max-w-2xl mx-auto">
+            <ErrorMessage message={error} />
+          </div>
         </div>
       </div>
     );
@@ -63,17 +69,12 @@ const BookingsPage: React.FC = () => {
       <EnhancedHeader />
       <div className="container mx-auto px-4 py-8">
         <div className="space-y-8">
-          {/* Header */}
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                My Bookings
-              </h1>
-              <p className="text-gray-600 mt-1">
-                Manage your hotel reservations
-              </p>
-            </div>
-            <Link to="/hotels" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors">
+          {/* Book New Stay Button */}
+          <div className="flex justify-end">
+            <Link 
+              to="/hotels" 
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+            >
               Book New Stay
             </Link>
           </div>
@@ -81,71 +82,162 @@ const BookingsPage: React.FC = () => {
         {/* Bookings List */}
         {bookings.length === 0 ? (
           <div className="text-center py-12">
-            <div className="space-y-4">
-              <CalendarIcon className="w-16 h-16 text-secondary-300 mx-auto" />
-              <div>
-                <h3 className="text-lg font-medium text-secondary-900">
-                  No bookings yet
-                </h3>
-                <p className="text-secondary-600">
-                  Start planning your next getaway!
-                </p>
+            <div className="bg-white rounded-lg shadow-md p-8 max-w-lg mx-auto border">
+              <div className="space-y-4">
+                <CalendarIcon className="w-16 h-16 text-gray-400 mx-auto" />
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900">
+                    No bookings yet
+                  </h3>
+                  <p className="text-gray-600 mt-1">
+                    Start planning your next getaway!
+                  </p>
+                </div>
+                <Link 
+                  to="/hotels"
+                  className="inline-block bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+                >
+                  Explore Hotels
+                </Link>
               </div>
-              <Link to="/hotels" className="btn-primary">
-                Explore Hotels
-              </Link>
             </div>
           </div>
         ) : (
-          <div className="space-y-4">
-            {bookings.map((booking) => (
-              <div key={booking.id} className="card hover:shadow-md transition-shadow">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                  <div className="flex-1 space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h3 className="text-lg font-semibold text-secondary-900">
-                          {booking.hotel_name}
-                        </h3>
-                        <p className="text-secondary-600">
-                          Room {booking.room_id} - {booking.room_type.replace('_', ' ')}
-                        </p>
-                      </div>
-                      <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
-                        Confirmed
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="flex items-center gap-2 text-secondary-600">
-                        <CalendarIcon className="w-4 h-4" />
-                        <span className="text-sm">
-                          {format(new Date(booking.check_in), 'MMM dd')} - {' '}
-                          {format(new Date(booking.check_out), 'MMM dd, yyyy')}
+          <div className="space-y-6">
+            {bookings.map((booking) => {
+              const isExpanded = expandedBooking === booking.id;
+              return (
+                <div key={booking.id} className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow border p-6">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div className="flex-1 space-y-3">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h3 className="text-xl font-semibold text-gray-900">
+                            {booking.hotel_name}
+                          </h3>
+                          <p className="text-gray-600">
+                            Room {booking.room_id} • {booking.room_type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                          </p>
+                        </div>
+                        <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                          Confirmed
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 text-secondary-600">
-                        <MapPinIcon className="w-4 h-4" />
-                        <span className="text-sm">Booking #{booking.id}</span>
-                      </div>
-                    </div>
 
-                    <div className="flex items-center justify-between">
-                      <span className="text-lg font-semibold text-primary-600">
-                        LKR {booking.total_amount?.toLocaleString()}
-                      </span>
-                      <Link
-                        to={`/bookings/${booking.id}`}
-                        className="flex items-center gap-2 text-primary-600 hover:text-primary-700 font-medium"
-                      >
-                        <EyeIcon className="w-4 h-4" />
-                        View Details
-                      </Link>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <CalendarIcon className="w-4 h-4" />
+                          <span className="text-sm">
+                            {format(new Date(booking.check_in), 'MMM dd')} - {' '}
+                            {format(new Date(booking.check_out), 'MMM dd, yyyy')}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <MapPinIcon className="w-4 h-4" />
+                          <span className="text-sm">Booking #{booking.id}</span>
+                        </div>
+                      </div>
+
+                      {/* Expanded Details */}
+                      {isExpanded && (
+                        <div className="mt-6 pt-6 border-t border-gray-200 space-y-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-3">
+                              <h4 className="font-semibold text-gray-900">Booking Information</h4>
+                              <div className="space-y-2 text-sm">
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Booking ID:</span>
+                                  <span className="font-medium">#{booking.id}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Guest Name:</span>
+                                  <span className="font-medium">{user?.given_name || 'N/A'}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Number of Guests:</span>
+                                  <span className="font-medium">2 Adults</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Special Requests:</span>
+                                  <span className="font-medium">None</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="space-y-3">
+                              <h4 className="font-semibold text-gray-900">Stay Details</h4>
+                              <div className="space-y-2 text-sm">
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Check-in:</span>
+                                  <span className="font-medium">{format(new Date(booking.check_in), 'EEEE, MMM dd, yyyy')}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Check-out:</span>
+                                  <span className="font-medium">{format(new Date(booking.check_out), 'EEEE, MMM dd, yyyy')}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Duration:</span>
+                                  <span className="font-medium">
+                                    {Math.ceil((new Date(booking.check_out).getTime() - new Date(booking.check_in).getTime()) / (1000 * 60 * 60 * 24))} nights
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Room Type:</span>
+                                  <span className="font-medium">{booking.room_type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Contact Information */}
+                          <div className="pt-4 border-t border-gray-100">
+                            <h4 className="font-semibold text-gray-900 mb-3">Contact Information</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">Email:</span>
+                                <span className="font-medium">{user?.email || 'N/A'}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">Phone:</span>
+                                <span className="font-medium">+94 77 123 4567</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Payment Information */}
+                          <div className="pt-4 border-t border-gray-100">
+                            <h4 className="font-semibold text-gray-900 mb-3">Payment Details</h4>
+                            <div className="bg-gray-50 rounded-lg p-4">
+                              <div className="flex justify-between items-center">
+                                <span className="text-lg font-semibold text-gray-900">Total Amount Paid:</span>
+                                <span className="text-2xl font-bold text-blue-600">
+                                  ${booking.total_amount?.toLocaleString()}
+                                </span>
+                              </div>
+                              <div className="mt-2 text-sm text-gray-600">
+                                Booking confirmed and payment processed
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between pt-3 border-t border-gray-200">
+                        <span className="text-2xl font-bold text-blue-600">
+                          ${booking.total_amount?.toLocaleString()}
+                        </span>
+                        <button
+                          onClick={() => setExpandedBooking(isExpanded ? null : booking.id)}
+                          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                        >
+                          <EyeIcon className="w-4 h-4" />
+                          {isExpanded ? 'Hide Details' : 'View Details'}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
         </div>

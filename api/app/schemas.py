@@ -56,7 +56,7 @@ class Hotel(BaseModel):
     address: Address
     rating: float
     amenities: List[str]
-    images: List[str]
+    images: Optional[List[str]] = None
     price_range: PriceRange
     rooms: Optional[List['Room']] = None
 
@@ -68,7 +68,7 @@ class Room(BaseModel):
     max_occupancy: int
     size_sqft: int
     amenities: List[str]
-    images: List[str]
+    images: Optional[List[str]] = None
     base_price: float
 
 class StaffAssignment(BaseModel):

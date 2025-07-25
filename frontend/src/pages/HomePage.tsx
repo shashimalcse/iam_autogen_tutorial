@@ -35,7 +35,7 @@ const HomePage: React.FC = () => {
                     <span className="text-sm text-gray-600">Excellent</span>
                   </div>
                   <div className="text-right">
-                    <span className="text-lg font-bold">LKR 15,500</span>
+                    <span className="text-lg font-bold">$200</span>
                     <p className="text-sm text-gray-600">per night</p>
                   </div>
                 </div>
@@ -57,7 +57,7 @@ const HomePage: React.FC = () => {
                     <span className="text-sm text-gray-600">Outstanding</span>
                   </div>
                   <div className="text-right">
-                    <span className="text-lg font-bold">LKR 22,800</span>
+                    <span className="text-lg font-bold">$200</span>
                     <p className="text-sm text-gray-600">per night</p>
                   </div>
                 </div>
@@ -79,7 +79,7 @@ const HomePage: React.FC = () => {
                     <span className="text-sm text-gray-600">Excellent</span>
                   </div>
                   <div className="text-right">
-                    <span className="text-lg font-bold">LKR 18,900</span>
+                    <span className="text-lg font-bold">$200</span>
                     <p className="text-sm text-gray-600">per night</p>
                   </div>
                 </div>

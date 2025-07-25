@@ -183,49 +183,6 @@ const ChatComponent: React.FC = () => {
     addUserMessage(userMessage);
     setInputValue('');
     setIsTyping(true);
-
-    // Simple local responses as fallback
-    setTimeout(() => {
-      const message = userMessage.toLowerCase();
-      let response = '';
-
-      if (message.includes('booking') || message.includes('reservation') || message.includes('book')) {
-        response = `I'd be happy to help you with your booking! Here are our current offerings:
-
-**🏨 Available Hotels:**
-• Gardeo Saman Villa - Bentota (LKR 15,500/night)
-• Gardeo Colombo Seven - Colombo (LKR 22,800/night)  
-• Gardeo Kandy Hills - Kandy (LKR 18,900/night)
-
-**✨ Weekend Deals:**
-• Up to 25% off weekend stays
-• Complimentary breakfast included
-• Free airport transfers
-
-Would you like me to check availability for specific dates?`;
-      } else if (message.includes('price') || message.includes('cost') || message.includes('rate')) {
-        response = `Here are our current room rates:
-
-**💰 Room Pricing:**
-• Deluxe Garden View - From LKR 15,500/night
-• Premium Pool View - From LKR 22,800/night
-• Executive Suite - From LKR 35,600/night
-
-**🎉 Special Offers:**
-• Book 3+ nights: 15% discount
-• Weekend packages: 20% off
-• Early bird (30+ days): 25% off
-
-All rates include taxes and free WiFi. Would you like more details about a specific room type?`;
-      } else {
-        response = `Thank you for your message! I'm here to assist with hotel bookings, room information, pricing, and amenities. How can I help you today?
-
-*Note: I'm currently running in fallback mode. For full AI assistance, please ensure the backend service is running.*`;
-      }
-
-      addAssistantMessage(response);
-      setIsTyping(false);
-    }, 1500);
   };
 
   // Handle consent response

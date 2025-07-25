@@ -155,7 +155,7 @@ export default function SearchResultsPage() {
                         <div className="text-right">
                           {hotel.lowest_rate && (
                             <div className="mb-2">
-                              <span className="text-2xl font-bold">LKR {hotel.lowest_rate.toLocaleString()}</span>
+                              <span className="text-2xl font-bold">${hotel.lowest_rate.toLocaleString()}</span>
                               <span className="text-sm text-gray-600 block">per night</span>
                             </div>
                           )}
@@ -177,7 +177,7 @@ export default function SearchResultsPage() {
                                   <span className="font-medium text-sm">{room.name}</span>
                                   <span className="text-xs text-gray-600 block">Up to {room.capacity} guests</span>
                                 </div>
-                                <span className="font-bold text-sm">LKR {room.price_per_night.toLocaleString()}</span>
+                                <span className="font-bold text-sm">${room.price_per_night.toLocaleString()}</span>
                               </div>
                             ))}
                           </div>

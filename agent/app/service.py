@@ -27,7 +27,10 @@ from starlette.responses import HTMLResponse
 from starlette.websockets import WebSocketDisconnect
 
 from app.prompt import agent_system_prompt
-from app.tools import fetch_hotels, fetch_rooms, make_booking
+from app.tools import (
+    fetch_hotels, fetch_hotel_details, make_booking, search_hotels, fetch_hotel_reviews,
+    get_booking, cancel_booking, fetch_reviews, create_review, get_review
+)
 from autogen.tool import SecureFunctionTool
 from auth import AuthRequestMessage, AutogenAuthManager, AuthSchema, AuthConfig, OAuthTokenType
 
@@ -134,43 +137,111 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     auth_managers[session_id] = auth_manager
 
     # Create the set of tools required
+    
+    # === PUBLIC HOTEL TOOLS (No Auth Required) ===
     fetch_hotels_tool = SecureFunctionTool(
         fetch_hotels,
-        description="Fetches all hotels and information about them",
-        name="FetchHotelsTool",
-        auth=AuthSchema(auth_manager, AuthConfig(
-            scopes=["read_hotels"],
-            token_type=OAuthTokenType.AGENT_TOKEN,
-            resource="booking_api"
-        )),
-        strict=True
+        description="Fetches all hotels with optional filters (city, brand, amenities, etc.)",
+        name="FetchHotelsTool"
+    )
+    
+    search_hotels_tool = SecureFunctionTool(
+        search_hotels,
+        description="Search hotels with availability for specific dates and location",
+        name="SearchHotelsTool"
     )
 
-    fetch_hotel_rooms_tool = SecureFunctionTool(
-        fetch_rooms,
-        description="Fetch the rooms available, and information related such as price, amenities, etc.",
-        name="FetchHotelRoomsTool",
-        auth=AuthSchema(auth_manager, AuthConfig(scopes=["read_rooms"],
-                                                             token_type=OAuthTokenType.AGENT_TOKEN,
-                                                             resource="booking_api")),
-        strict=True
+    fetch_hotel_details_tool = SecureFunctionTool(
+        fetch_hotel_details,
+        description="Fetch detailed information about a specific hotel including rooms",
+        name="FetchHotelDetailsTool"
+    )
+    
+    fetch_hotel_reviews_tool = SecureFunctionTool(
+        fetch_hotel_reviews,
+        description="Fetch reviews for a specific hotel",
+        name="FetchHotelReviewsTool"
+    )
+    
+    # === PUBLIC REVIEW TOOLS ===
+    fetch_reviews_tool = SecureFunctionTool(
+        fetch_reviews,
+        description="Fetch all reviews with optional filters",
+        name="FetchReviewsTool"
+    )
+    
+    get_review_tool = SecureFunctionTool(
+        get_review,
+        description="Get details of a specific review",
+        name="GetReviewTool"
     )
 
+    # === PROTECTED BOOKING TOOLS (Auth Required) ===
     book_hotel_tool = SecureFunctionTool(
         make_booking,
-        description="Books the hotel room selected by the user.",
+        description="Books the hotel room selected by the user",
         name="BookHotelTool",
-        auth=AuthSchema(auth_manager, AuthConfig(scopes=["create_bookings", "openid", "profile"],
-                                                 token_type=OAuthTokenType.OBO_TOKEN,
-                                                 resource="booking_api")),
-        strict=True
+        auth=AuthSchema(auth_manager, AuthConfig(
+            scopes=["create_bookings", "openid", "profile"],
+            token_type=OAuthTokenType.OBO_TOKEN,
+            resource="booking_api"
+        ))
+    )
+    
+    get_booking_tool = SecureFunctionTool(
+        get_booking,
+        description="Get details of a specific booking",
+        name="GetBookingTool",
+        auth=AuthSchema(auth_manager, AuthConfig(
+            scopes=["read_bookings"],
+            token_type=OAuthTokenType.OBO_TOKEN,
+            resource="booking_api"
+        ))
+    )
+    
+    cancel_booking_tool = SecureFunctionTool(
+        cancel_booking,
+        description="Cancel a specific booking",
+        name="CancelBookingTool",
+        auth=AuthSchema(auth_manager, AuthConfig(
+            scopes=["cancel_bookings"],
+            token_type=OAuthTokenType.OBO_TOKEN,
+            resource="booking_api"
+        ))
+    )
+    
+    # === PROTECTED REVIEW TOOLS ===
+    create_review_tool = SecureFunctionTool(
+        create_review,
+        description="Create a review for a booking",
+        name="CreateReviewTool",
+        auth=AuthSchema(auth_manager, AuthConfig(
+            scopes=["create_bookings"],
+            token_type=OAuthTokenType.OBO_TOKEN,
+            resource="booking_api"
+        ))
     )
 
     # Create a agent instance for the chat session
     hotel_assistant = AssistantAgent(
         "hotel_booking_assistant",
         model_client=model_client,
-        tools=[fetch_hotels_tool, fetch_hotel_rooms_tool, book_hotel_tool],
+        tools=[
+            # Public Hotel Tools
+            fetch_hotels_tool,
+            search_hotels_tool, 
+            fetch_hotel_details_tool,
+            fetch_hotel_reviews_tool,
+            # Public Review Tools
+            fetch_reviews_tool,
+            get_review_tool,
+            # Protected Booking Tools
+            book_hotel_tool,
+            get_booking_tool,
+            cancel_booking_tool,
+            # Protected Review Tools
+            create_review_tool
+        ],
         reflect_on_tool_use=True,
         system_message=agent_system_prompt)
 

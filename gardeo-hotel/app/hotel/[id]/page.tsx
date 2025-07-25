@@ -368,7 +368,7 @@ export default function HotelDetailsPage() {
 
                         <div className="flex justify-between items-center">
                           <div>
-                            <span className="text-lg font-bold">LKR {room.price_per_night.toLocaleString()}</span>
+                            <span className="text-lg font-bold">${room.price_per_night.toLocaleString()}</span>
                             <span className="text-sm text-gray-600 block">per night</span>
                           </div>
                           <Button

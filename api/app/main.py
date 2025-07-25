@@ -92,6 +92,41 @@ def convert_review_to_public(review: dict) -> dict:
     public_review['reviewer_name'] = anonymize_reviewer_name(review['user_id'])
     return public_review
 
+def enrich_booking_with_user_agent_info(booking: dict) -> dict:
+    """Enrich booking data with user and agent details"""
+    enriched_booking = booking.copy()
+    
+    # Add user details
+    user_info = None
+    if booking.get('user_id') and booking['user_id'] in users_data:
+        user_data = users_data[booking['user_id']]
+        user_info = {
+            "id": user_data['id'],
+            "email": user_data['email'],
+            "first_name": user_data['first_name'],
+            "last_name": user_data['last_name'],
+            "phone": user_data.get('phone'),
+            "loyalty_tier": user_data.get('loyalty_tier')
+        }
+    
+    # Add agent details
+    agent_info = None
+    if booking.get('agent_id') and booking['agent_id'] in users_data:
+        agent_data = users_data[booking['agent_id']]
+        agent_info = {
+            "id": agent_data['id'],
+            "email": agent_data['email'],
+            "first_name": agent_data['first_name'],
+            "last_name": agent_data['last_name'],
+            "phone": agent_data.get('phone')
+        }
+    
+    # Add enriched data to booking
+    enriched_booking['user_info'] = user_info
+    enriched_booking['agent_info'] = agent_info
+    
+    return enriched_booking
+
 app = FastAPI(
     title="Hotel API",
     description="API for managing hotel bookings, reviews, and user interactions.",
@@ -152,7 +187,10 @@ async def get_hotels(
             if not all(amenity.lower() in hotel_amenities for amenity in amenities):
                 continue
         
-        filtered_hotels.append(Hotel(**hotel_data))
+        # Remove images from hotel data before creating Hotel object
+        hotel_data_clean = hotel_data.copy()
+        hotel_data_clean.pop('images', None)
+        filtered_hotels.append(Hotel(**hotel_data_clean))
     
     # Apply pagination
     total = len(filtered_hotels)
@@ -191,12 +229,14 @@ async def search_hotels(
                     
                     if is_available:
                         room_with_availability = room_data.copy()
+                        room_with_availability.pop('images', None)  # Remove images
                         room_with_availability['available'] = True
                         room_with_availability['price_per_night'] = room_data['base_price']
                         available_rooms.append(room_with_availability)
             
             if available_rooms:
                 hotel_with_rooms = hotel_data.copy()
+                hotel_with_rooms.pop('images', None)  # Remove images
                 hotel_with_rooms['available_rooms'] = available_rooms
                 hotel_with_rooms['lowest_rate'] = min(room['base_price'] for room in available_rooms)
                 available_hotels.append(hotel_with_rooms)
@@ -220,12 +260,15 @@ async def get_hotel(
     
     hotel_data_copy = hotels_data[hotel_id].copy()
     
-    # Add rooms to hotel data
+    # Add rooms to hotel data (remove images from both hotel and rooms)
     hotel_rooms = []
     for room_id, room_data in rooms_data.get(hotel_id, {}).items():
-        hotel_rooms.append(Room(**room_data))
+        room_data_clean = room_data.copy()
+        room_data_clean.pop('images', None)  # Remove images from room data
+        hotel_rooms.append(Room(**room_data_clean))
     
     hotel_data_copy['rooms'] = hotel_rooms
+    hotel_data_copy.pop('images', None)  # Remove images from hotel data
     
     return Hotel(**hotel_data_copy)
 
@@ -329,7 +372,41 @@ async def create_booking(
     
     # Create booking
     last_booking_id += 1
+    
+    # Determine user and agent from OAuth token claims
+    # If user_id is provided in request, use it; otherwise use token sub (the actual user)
     user_id = booking_request.user_id or token_data.sub
+    
+    # Check if there's an agent (act claim) making the booking
+    agent_id = None
+    created_by = "user"
+    
+    # Debug logging for token claims
+    logger.info(f"Token claims - sub: {token_data.sub}, act: {token_data.act}")
+    if token_data.act:
+        logger.info(f"Act claim details - type: {type(token_data.act)}, value: {token_data.act}")
+        if hasattr(token_data.act, 'sub'):
+            logger.info(f"Act.sub: {token_data.act.sub}")
+    
+    # More robust check for agent presence
+    if (token_data.act and 
+        hasattr(token_data.act, 'sub') and 
+        token_data.act.sub and 
+        token_data.act.sub.strip()):
+        # Agent is making the booking (act.sub is the agent)
+        agent_id = token_data.act.sub
+        created_by = "agent"
+        # In this case, token_data.sub is the actual user, user_id from request is also the user
+        user_id = booking_request.user_id or token_data.sub
+        logger.info(f"Agent booking detected - agent_id: {agent_id}, user_id: {user_id}")
+    else:
+        # Direct user booking (no agent involved)
+        agent_id = None
+        created_by = "user"
+        user_id = token_data.sub  # The user making their own booking
+        logger.info(f"User booking detected - user_id: {user_id}")
+    
+    logger.info(f"Final booking values - created_by: {created_by}, user_id: {user_id}, agent_id: {agent_id}")
     
     new_booking = {
         "id": last_booking_id,
@@ -346,8 +423,8 @@ async def create_booking(
         "status": "confirmed",
         "special_requests": booking_request.special_requests or [],
         "created_at": datetime.now(),
-        "created_by": "agent" if booking_request.user_id else "user",
-        "agent_id": token_data.sub if booking_request.user_id else None,
+        "created_by": created_by,
+        "agent_id": agent_id,
         "assigned_staff": []
     }
     
@@ -355,7 +432,7 @@ async def create_booking(
     
     return Booking(**new_booking)
 
-@api_router.get("/bookings/{booking_id}", response_model=Booking)
+@api_router.get("/bookings/{booking_id}")
 async def get_booking(
     request: Request,
     booking_id: int,
@@ -373,7 +450,9 @@ async def get_booking(
     if booking['user_id'] != token_data.sub and 'read_all_bookings' not in token_data.permissions:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    return Booking(**booking)
+    # Enrich booking with user and agent information
+    enriched_booking = enrich_booking_with_user_agent_info(booking)
+    return enriched_booking
 
 @api_router.post("/bookings/{booking_id}/cancel", response_model=Booking)
 async def cancel_booking(
@@ -403,7 +482,7 @@ async def cancel_booking(
     return Booking(**booking)
 
 # === User Booking Endpoints ===
-@api_router.get("/users/{user_id}/bookings", response_model=BookingsResponse)
+@api_router.get("/users/{user_id}/bookings")
 async def get_user_bookings(
     request: Request,
     user_id: str,
@@ -422,17 +501,19 @@ async def get_user_bookings(
     for booking in bookings_data.values():
         if booking['user_id'] == user_id:
             if status is None or booking['status'] == status.value:
-                user_bookings.append(Booking(**booking))
+                # Enrich booking with user and agent information
+                enriched_booking = enrich_booking_with_user_agent_info(booking)
+                user_bookings.append(enriched_booking)
     
     # Sort by creation date (newest first)
-    user_bookings.sort(key=lambda x: x.created_at, reverse=True)
+    user_bookings.sort(key=lambda x: x['created_at'], reverse=True)
     
     # Apply limit
     limited_bookings = user_bookings[:limit]
     
-    return BookingsResponse(bookings=limited_bookings, total=len(user_bookings))
+    return {"bookings": limited_bookings, "total": len(user_bookings)}
 
-@api_router.get("/users/{user_id}/bookings/{booking_id}", response_model=Booking)
+@api_router.get("/users/{user_id}/bookings/{booking_id}")
 async def get_user_booking(
     request: Request,
     user_id: str,
@@ -454,7 +535,9 @@ async def get_user_booking(
     if user_id != token_data.sub and 'read_all_bookings' not in token_data.permissions:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    return Booking(**booking)
+    # Enrich booking with user and agent information
+    enriched_booking = enrich_booking_with_user_agent_info(booking)
+    return enriched_booking
 
 @api_router.post("/users/{user_id}/bookings/{booking_id}/reviews", response_model=Review)
 async def create_user_booking_review(

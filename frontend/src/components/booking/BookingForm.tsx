@@ -64,7 +64,7 @@ const BookingForm: React.FC<BookingFormProps> = ({
           </div>
           <div className="flex justify-between">
             <span className="text-secondary-600">Price per night:</span>
-            <span className="font-medium">LKR {room.base_price.toLocaleString()}</span>
+            <span className="font-medium">${room.base_price.toLocaleString()}</span>
           </div>
         </div>
 
@@ -139,11 +139,11 @@ const BookingForm: React.FC<BookingFormProps> = ({
               </div>
               <div className="flex justify-between text-sm">
                 <span>Rate:</span>
-                <span>LKR {room.base_price.toLocaleString()} × {days}</span>
+                <span>${room.base_price.toLocaleString()} × {days}</span>
               </div>
               <div className="border-t border-primary-200 pt-2 flex justify-between font-semibold">
                 <span>Total:</span>
-                <span className="text-primary-600">LKR {calculateTotal().toLocaleString()}</span>
+                <span className="text-primary-600">{calculateTotal().toLocaleString()}</span>
               </div>
             </div>
           )}
