@@ -69,6 +69,8 @@ paths:
       operationId: triggerAutoAssign
       tags:
         - Webhooks
+      security:
+        - bearerAuth: [auto_assign]
       requestBody:
         required: true
         content:
