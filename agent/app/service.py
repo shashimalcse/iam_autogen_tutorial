@@ -12,6 +12,8 @@
 
 import logging
 import os
+import uuid
+import asyncio
 from typing import Literal, Dict
 
 from fastapi.responses import HTMLResponse
@@ -26,8 +28,12 @@ from pydantic import BaseModel
 from starlette.responses import HTMLResponse
 from starlette.websockets import WebSocketDisconnect
 
-from app.prompt import agent_system_prompt
-from app.tools import fetch_hotels, fetch_rooms, make_booking
+from app.prompt import agent_system_prompt, admin_agent_system_prompt
+from app.tools import (
+    fetch_hotels, fetch_hotel_details, make_booking, search_hotels, fetch_hotel_reviews,
+    get_review, fetch_reviews,
+    update_booking_admin, get_available_staff, get_booking_admin
+)
 from autogen.tool import SecureFunctionTool
 from auth import AuthRequestMessage, AutogenAuthManager, AuthSchema, AuthConfig, OAuthTokenType
 
@@ -35,7 +41,7 @@ from asgardeo_ai.models import AgentConfig
 from asgardeo.auth.models import ServerConfig, ClientConfig
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 load_dotenv()
@@ -46,10 +52,15 @@ client_secret = os.environ.get('ASGARDEO_CLIENT_SECRET')
 base_url = os.environ.get('ASGARDEO_BASE_URL')
 redirect_uri = os.environ.get('ASGARDEO_REDIRECT_URI', 'http://localhost:8000/callback')
 
-# Agent related configurations
+# Interactive booking agent configurations
 agent_id = os.environ.get('AGENT_ID')
 agent_name = os.environ.get('AGENT_NAME')
 agent_secret = os.environ.get('AGENT_SECRET')
+
+# Background assignment agent configurations (separate identity)
+background_agent_id = os.environ.get('BACKGROUND_AGENT_ID')
+background_agent_name = os.environ.get('BACKGROUND_AGENT_NAME')
+background_agent_secret = os.environ.get('BACKGROUND_AGENT_SECRET')
 
 server_config = ServerConfig(
     base_url=base_url
@@ -61,10 +72,18 @@ client_config = ClientConfig(
     redirect_uri=redirect_uri
 )
 
+# Interactive booking agent config
 agent_config = AgentConfig(
     agent_id=agent_id,
     agent_name=agent_name,
     agent_secret=agent_secret,
+)
+
+# Background assignment agent config (separate identity)
+background_agent_config = AgentConfig(
+    agent_id=background_agent_id,
+    agent_name=background_agent_name,
+    agent_secret=background_agent_secret,
 )
 
 # Azure OpenAI configs
@@ -72,12 +91,29 @@ azure_openai_endpoint = os.environ.get('AZURE_OPENAI_ENDPOINT')
 deployment_name = os.environ.get('AZURE_OPENAI_DEPLOYMENT_NAME')
 azure_openai_api_version = os.environ.get('AZURE_OPENAI_API_VERSION')
 
+google_api_key = os.environ.get('GOOGLE_API_KEY')
+
 app = FastAPI()
 
 
 class TextResponse(BaseModel):
     type: Literal["message"] = "message"
     content: str
+
+class AutoAssignWebhook(BaseModel):
+    event_type: str
+    booking_id: int
+    user_id: str
+    hotel_id: int
+    priority: str = "normal"
+    timestamp: str
+    source: str = "hotel_api"
+
+class WebhookResponse(BaseModel):
+    task_id: str
+    status: str
+    message: str
+    estimated_completion: str
 
 
 model_client = AzureOpenAIChatCompletionClient(
@@ -112,6 +148,87 @@ async def run_agent(assistant: AssistantAgent, websocket: WebSocket):
         # Send the response back to the client
         await websocket.send_json(TextResponse(content=response.chat_message.content).model_dump())
 
+async def run_background_agent_for_assignment(webhook_data: AutoAssignWebhook, task_id: str) -> None:
+    """Create and run a background agent for contact person assignment"""
+    try:
+        logger.info(f"Starting background agent task {task_id} for booking {webhook_data.booking_id}")
+        
+        # Check if background agent config is available
+        if background_agent_config is None:
+            logger.error(f"Background agent not configured. Task {task_id} cannot proceed.")
+            raise Exception("Background agent credentials not configured")
+        
+        # Create a background auth manager instance with separate agent identity
+        background_auth_manager = AutogenAuthManager(
+            server_config=server_config,
+            client_config=client_config,
+            agent_config=background_agent_config,  # Use separate background agent config
+            message_handler=None  # No message handler for background tasks
+        )
+        
+        
+        get_booking_admin_tool = SecureFunctionTool(
+            get_booking_admin,
+            description="Get the booking information by booking ID",
+            name="GetBookingByIdTool",
+            auth=AuthSchema(background_auth_manager, AuthConfig(
+                scopes=["admin_read_bookings"],
+                token_type=OAuthTokenType.AGENT_TOKEN,
+                resource="booking_api"
+            ))
+        )
+        
+        update_booking_tool = SecureFunctionTool(
+            update_booking_admin,
+            description="Assign Contact Person by Updating the booking",
+            name="UpdateBookingTool",
+            auth=AuthSchema(background_auth_manager, AuthConfig(
+                scopes=["admin_update_bookings"],
+                token_type=OAuthTokenType.AGENT_TOKEN,
+                resource="booking_api"
+            ))
+        )
+        
+        get_available_staff_tool = SecureFunctionTool(
+            get_available_staff,
+            description="Get available staff for booking assignments",
+            name="GetAvailableStaffTool",
+            auth=AuthSchema(background_auth_manager, AuthConfig(
+                scopes=["admin_read_staff"],
+                token_type=OAuthTokenType.AGENT_TOKEN,
+                resource="booking_api"
+            ))
+        )
+    
+        # Create a specialized agent for assignment tasks
+        assignment_agent = AssistantAgent(
+            "hotel_admin_assistant",
+            model_client=model_client,
+            tools=[
+                get_booking_admin_tool,
+                get_available_staff_tool,
+                update_booking_tool,
+            ],
+            reflect_on_tool_use=True,
+            system_message=admin_agent_system_prompt,
+            max_tool_iterations=20,
+            )
+
+        response = await asyncio.wait_for(
+            assignment_agent.run(
+                task=f"Assign contact person for booking id : {webhook_data.booking_id} , hotel id : {webhook_data.hotel_id}"
+            ),
+            timeout=300  # 5 minutes timeout
+        )
+
+        print(response.messages)
+        print(f"Final Response: {response.messages[-1].content}")
+
+        logger.info(f"Background agent task {task_id} completed successfully")
+        
+    except Exception as e:
+        logger.error(f"Background agent task {task_id} failed: {str(e)}", exc_info=True)     
+
 @app.websocket("/chat")
 async def websocket_endpoint(websocket: WebSocket, session_id: str):
     """WebSocket endpoint for chat functionality"""
@@ -134,43 +251,71 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     auth_managers[session_id] = auth_manager
 
     # Create the set of tools required
+    
     fetch_hotels_tool = SecureFunctionTool(
         fetch_hotels,
-        description="Fetches all hotels and information about them",
-        name="FetchHotelsTool",
-        auth=AuthSchema(auth_manager, AuthConfig(
-            scopes=["read_hotels"],
-            token_type=OAuthTokenType.AGENT_TOKEN,
-            resource="booking_api"
-        )),
-        strict=True
+        description="Fetches all hotels with optional filters (city, brand, amenities, etc.)",
+        name="FetchHotelsTool"
+    )
+    
+    search_hotels_tool = SecureFunctionTool(
+        search_hotels,
+        description="Search hotels with availability for specific dates and location",
+        name="SearchHotelsTool"
     )
 
-    fetch_hotel_rooms_tool = SecureFunctionTool(
-        fetch_rooms,
-        description="Fetch the rooms available, and information related such as price, amenities, etc.",
-        name="FetchHotelRoomsTool",
-        auth=AuthSchema(auth_manager, AuthConfig(scopes=["read_rooms"],
-                                                             token_type=OAuthTokenType.AGENT_TOKEN,
-                                                             resource="booking_api")),
-        strict=True
+    fetch_hotel_details_tool = SecureFunctionTool(
+        fetch_hotel_details,
+        description="Fetch detailed information about a specific hotel including rooms",
+        name="FetchHotelDetailsTool"
+    )
+    
+    fetch_hotel_reviews_tool = SecureFunctionTool(
+        fetch_hotel_reviews,
+        description="Fetch reviews for a specific hotel",
+        name="FetchHotelReviewsTool"
+    )
+    
+    fetch_reviews_tool = SecureFunctionTool(
+        fetch_reviews,
+        description="Fetch all reviews with optional filters",
+        name="FetchReviewsTool"
+    )
+    
+    get_review_tool = SecureFunctionTool(
+        get_review,
+        description="Get details of a specific review",
+        name="GetReviewTool"
     )
 
     book_hotel_tool = SecureFunctionTool(
         make_booking,
-        description="Books the hotel room selected by the user.",
+        description="Books the hotel room selected by the user",
         name="BookHotelTool",
-        auth=AuthSchema(auth_manager, AuthConfig(scopes=["create_bookings", "openid", "profile"],
-                                                 token_type=OAuthTokenType.OBO_TOKEN,
-                                                 resource="booking_api")),
-        strict=True
+        auth=AuthSchema(auth_manager, AuthConfig(
+            scopes=["create_bookings", "openid", "profile"],
+            token_type=OAuthTokenType.OBO_TOKEN,
+            resource="booking_api"
+        ))
     )
-
+    
     # Create a agent instance for the chat session
     hotel_assistant = AssistantAgent(
         "hotel_booking_assistant",
         model_client=model_client,
-        tools=[fetch_hotels_tool, fetch_hotel_rooms_tool, book_hotel_tool],
+        tools=[
+            # Public Hotel Tools
+            fetch_hotels_tool,
+            search_hotels_tool, 
+            fetch_hotel_details_tool,
+            fetch_hotel_reviews_tool,
+            # Public Review Tools
+            fetch_reviews_tool,
+            get_review_tool,
+            # Protected Booking Tools
+            book_hotel_tool,
+
+        ],
         reflect_on_tool_use=True,
         system_message=agent_system_prompt)
 
@@ -260,3 +405,36 @@ async def callback(
     except Exception as e:
         logger.error(f"Error in callback: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/webhook/auto-assign")
+async def auto_assign_webhook(webhook_data: AutoAssignWebhook):
+    """Webhook endpoint to receive auto-assignment requests from the booking API"""
+    try:
+        # Validate event type
+        if webhook_data.event_type != "booking.auto_assign_requested":
+            raise HTTPException(status_code=400, detail="Invalid event type")
+        
+        # Generate unique task ID
+        task_id = str(uuid.uuid4())
+        
+        # Calculate estimated completion time (2-5 minutes from now)
+        import datetime
+        estimated_completion = datetime.datetime.now() + datetime.timedelta(minutes=3)
+        
+        # Create background task for assignment
+        asyncio.create_task(run_background_agent_for_assignment(webhook_data, task_id))
+        
+        logger.info(f"Auto-assignment task {task_id} queued for booking {webhook_data.booking_id}")
+        
+        return WebhookResponse(
+            task_id=task_id,
+            status="queued",
+            message=f"Background agent task queued for contact person assignment",
+            estimated_completion=estimated_completion.isoformat()
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Webhook processing failed: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to process webhook")

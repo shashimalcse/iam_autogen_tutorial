@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { format, addDays, differenceInDays } from 'date-fns';
 import { CalendarIcon, UserIcon } from '@heroicons/react/24/outline';
-import { RoomBasic, BookingCreate } from '../../types';
+import { Room, BookingCreate } from '../../types';
 
 interface BookingFormProps {
-  room: RoomBasic;
+  room: Room;
   hotelId: number;
   hotelName: string;
   onSubmit: (bookingData: BookingCreate) => void;
@@ -26,7 +26,7 @@ const BookingForm: React.FC<BookingFormProps> = ({
 
   const calculateTotal = () => {
     const days = differenceInDays(new Date(checkOut), new Date(checkIn));
-    return days > 0 ? days * room.price_per_night : 0;
+    return days > 0 ? days * room.base_price : 0;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -36,7 +36,7 @@ const BookingForm: React.FC<BookingFormProps> = ({
       room_id: room.id,
       check_in: checkIn,
       check_out: checkOut,
-      guest_count: guestCount,
+      guests: guestCount,
     });
   };
 
@@ -59,12 +59,12 @@ const BookingForm: React.FC<BookingFormProps> = ({
           <div className="flex justify-between">
             <span className="text-secondary-600">Room:</span>
             <span className="font-medium">
-              {room.room_number} ({room.room_type.replace('_', ' ')})
+              {room.room_type}
             </span>
           </div>
           <div className="flex justify-between">
             <span className="text-secondary-600">Price per night:</span>
-            <span className="font-medium">${room.price_per_night}</span>
+            <span className="font-medium">${room.base_price.toLocaleString()}</span>
           </div>
         </div>
 
@@ -117,7 +117,7 @@ const BookingForm: React.FC<BookingFormProps> = ({
                 className="input-field pl-10"
                 required
               >
-                {Array.from({ length: room.occupancy }, (_, i) => (
+                {Array.from({ length: room.max_occupancy }, (_, i) => (
                   <option key={i + 1} value={i + 1}>
                     {i + 1} Guest{i + 1 !== 1 ? 's' : ''}
                   </option>
@@ -126,7 +126,7 @@ const BookingForm: React.FC<BookingFormProps> = ({
               <UserIcon className="absolute left-3 top-3 w-4 h-4 text-secondary-400" />
             </div>
             <p className="text-sm text-secondary-500 mt-1">
-              Maximum occupancy: {room.occupancy} guests
+              Maximum occupancy: {room.max_occupancy} guests
             </p>
           </div>
 
@@ -139,11 +139,11 @@ const BookingForm: React.FC<BookingFormProps> = ({
               </div>
               <div className="flex justify-between text-sm">
                 <span>Rate:</span>
-                <span>${room.price_per_night} × {days}</span>
+                <span>${room.base_price.toLocaleString()} × {days}</span>
               </div>
               <div className="border-t border-primary-200 pt-2 flex justify-between font-semibold">
                 <span>Total:</span>
-                <span className="text-primary-600">${calculateTotal()}</span>
+                <span className="text-primary-600">{calculateTotal().toLocaleString()}</span>
               </div>
             </div>
           )}

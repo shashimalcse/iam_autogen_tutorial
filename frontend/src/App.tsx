@@ -2,11 +2,11 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from "@asgardeo/auth-react";
 import { AsgardeoAuthProvider } from './contexts/AsgardeoAuthContext';
+import { SearchProvider } from './contexts/SearchContext';
 import asgardeoConfig from './config/asgardeo';
 import HomePage from './pages/HomePage';
-import AsgardeoLoginPage from './pages/AsgardeoLoginPage';
 import EnhancedHotelListPage from './pages/EnhancedHotelListPage';
-import EnhancedHotelDetailPage from './pages/EnhancedHotelDetailPage';
+import { EnhancedHotelDetailPage } from './pages/EnhancedHotelDetailPage';
 import BookingsPage from './pages/BookingsPage';
 import BookingConfirmationPage from './pages/BookingConfirmationPage';
 
@@ -14,26 +14,22 @@ const App: React.FC = () => {
   return (
     <AuthProvider config={asgardeoConfig}>
       <AsgardeoAuthProvider>
-        <Router>
+        <SearchProvider>
+          <Router>
           <div className="App">
             <Routes>
               {/* Public Routes */}
               <Route path="/" element={<HomePage />} />
-              <Route path="/login" element={<AsgardeoLoginPage />} />
-              
-              Protected Routes
               <Route 
                 path="/hotels" 
-                element={
-                    <EnhancedHotelListPage />
-                } 
+                element={<EnhancedHotelListPage />} 
               />
               <Route 
                 path="/hotels/:id" 
-                element={
-                    <EnhancedHotelDetailPage />
-                } 
+                element={<EnhancedHotelDetailPage />} 
               />
+              
+              {/* Protected Routes */}
               <Route 
                 path="/bookings" 
                 element={
@@ -41,7 +37,7 @@ const App: React.FC = () => {
                 } 
               />
               <Route 
-                path="/bookings/:id" 
+                path="/booking-confirmation" 
                 element={
                     <BookingConfirmationPage />
                 } 
@@ -51,7 +47,8 @@ const App: React.FC = () => {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </div>
-        </Router>
+          </Router>
+        </SearchProvider>
       </AsgardeoAuthProvider>
     </AuthProvider>
   );
