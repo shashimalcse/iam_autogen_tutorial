@@ -1,5 +1,5 @@
 # Use an official Python runtime as a base image
-FROM python:3.11-slim
+FROM python:3.11-alpine
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -9,11 +9,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libpq-dev \
+RUN apk add --no-cache \
+    build-base \
+    postgresql-dev \
     git \
-    && rm -rf /var/lib/apt/lists/*
+    gcc \
+    musl-dev \
+    libffi-dev
 
 # Install Python dependencies
 COPY requirements.txt .

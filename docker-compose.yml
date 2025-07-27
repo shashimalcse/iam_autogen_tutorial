@@ -37,4 +37,4 @@ services:
     environment:
       - REACT_APP_API_URL=http://localhost:8001
     depends_on:
-      - api
+      - backend
