@@ -15,6 +15,7 @@ from data import (
     reviews_data, last_review_id, users_data, staff_data
 )
 from .services import scim_service
+from .services.jwt_client import jwt_client
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -160,8 +161,15 @@ async def enrich_booking_with_user_agent_info(booking: dict) -> dict:
     return enriched_booking
 
 async def fire_auto_assign_webhook(booking_id: int, user_id: str, hotel_id: int, priority: str = "normal") -> None:
-    """Fire webhook to agent service for automatic contact person assignment"""
+    """Fire webhook to agent service for automatic contact person assignment with JWT authentication"""
     try:
+        # Get JWT token for webhook scope
+        webhook_scope = "auto_assign"
+        access_token = await jwt_client.get_access_token(webhook_scope)
+        if not access_token:
+            logger.error(f"Failed to get access token for webhook call - booking {booking_id}")
+            return
+        
         webhook_payload = {
             "event_type": "booking.auto_assign_requested",
             "booking_id": booking_id,
@@ -178,7 +186,10 @@ async def fire_auto_assign_webhook(booking_id: int, user_id: str, hotel_id: int,
             response = await client.post(
                 webhook_url,
                 json=webhook_payload,
-                headers={"Content-Type": "application/json"}
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {access_token}"
+                }
             )
             response.raise_for_status()
             
@@ -884,8 +895,9 @@ async def health_check():
 
 @app.get("/cache/stats")
 async def get_cache_stats():
-    """Get SCIM cache statistics for monitoring"""
+    """Get cache statistics for monitoring"""
     return {
         "scim_cache": scim_service.get_cache_stats(),
+        "jwt_tokens": jwt_client.get_token_stats(),
         "timestamp": datetime.now().isoformat()
     }

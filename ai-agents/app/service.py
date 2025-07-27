@@ -409,7 +409,7 @@ from app.dependencies import validate_token, TokenData
 from fastapi import Security
 
 @app.post("/webhook/auto-assign")
-async def auto_assign_webhook(webhook_data: AutoAssignWebhook, token_data: TokenData = Security(validate_token, scopes=["webhook:auto_assign"])):
+async def auto_assign_webhook(webhook_data: AutoAssignWebhook, token_data: TokenData = Security(validate_token, scopes=["auto_assign"])):
     """Webhook endpoint to receive auto-assignment requests from the booking API"""
     try:
         # Check if background agent is enabled
