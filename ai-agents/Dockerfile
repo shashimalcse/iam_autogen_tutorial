@@ -1,6 +1,12 @@
 # Use an official Python runtime as a base image
 FROM python:3.11-slim
 
+# Create non-root user with home directory
+RUN addgroup -g 10014 choreo \
+ && adduser -D -u 10014 -G choreo choreouser \
+ && mkdir -p /home/choreouser \
+ && chown -R choreouser:choreo /home/choreouser
+
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
@@ -22,8 +28,8 @@ RUN pip install 'uvicorn[standard]'
 RUN pip install poetry
 
 # Clone and build asgardeo packages from GitHub (always fresh, no cache)
-RUN rm -rf /tmp/python-sdk && \
-    git clone -b sdk https://github.com/shashimalcse/python.git /tmp/python-sdk
+RUN rm -rf /home/choreouser/python-sdk && \
+    git clone -b sdk https://github.com/shashimalcse/python.git /home/choreouser/python-sdk
 
 # Uninstall any existing asgardeo packages and install fresh
 RUN pip uninstall -y asgardeo asgardeo-ai || true --no-cache
@@ -36,7 +42,7 @@ WORKDIR /tmp/python-sdk/packages/asgardeo-ai
 RUN poetry build --no-cache
 
 # Install both packages together to resolve dependencies (no cache)
-RUN pip install --force-reinstall --no-cache-dir --no-deps /tmp/python-sdk/packages/asgardeo/dist/*.whl /tmp/python-sdk/packages/asgardeo-ai/dist/*.whl
+RUN pip install --force-reinstall --no-cache-dir --no-deps /home/choreouser/python-sdk/packages/asgardeo/dist/*.whl /home/choreouser/python-sdk/packages/asgardeo-ai/dist/*.whl
 
 WORKDIR /app
 
