@@ -403,8 +403,8 @@ const ChatComponent: React.FC = () => {
                 {/* Auth Request */}
                 {pendingAuth && (
                   <div className="bg-white border border-gray-200 rounded-lg p-4">
-                    <h4 className="font-semibold mb-2 text-sm text-gray-900">Authorization Required</h4>
-                    <p className="text-gray-600 mb-3 text-sm">To complete your hotel booking, you need to authorize with your Asgardeo account.</p>
+                    <h4 className="font-semibold mb-2 text-sm text-gray-900">Approval needed!</h4>
+                    <p className="text-gray-600 mb-3 text-sm">Please approve to complete your booking.</p>
                     {pendingAuth.context && (
                       <div className="mb-3 text-sm bg-gray-50 p-2 rounded-lg">
                         <strong className="text-gray-900">Booking Details:</strong>
@@ -419,7 +419,7 @@ const ChatComponent: React.FC = () => {
                       onClick={handleAuthorization}
                       className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm w-full sm:w-auto"
                     >
-                      Authorize Booking
+                      Approve
                     </button>
                   </div>
                 )}

@@ -127,7 +127,7 @@ const HomePage: React.FC = () => {
         </div>
       </div>
       
-      <ChatComponent />
+      {/* <ChatComponent /> */}
     </div>
   );
 };

@@ -129,6 +129,7 @@ const BookingsPage: React.FC = () => {
                               </span>
                             </div>
                           )}
+                          
                         </div>
                         <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
                           Confirmed
@@ -249,6 +250,44 @@ const BookingsPage: React.FC = () => {
                                   <p className="text-sm text-gray-800 mt-1 italic">{booking.agent_info.description}</p>
                                 </div>
                               )}
+                            </div>
+                          )}
+
+                          {/* Assigned Staff Information */}
+                          {booking.assigned_staff && booking.assigned_staff.length > 0 && (
+                            <div className="pt-4 border-t border-gray-100">
+                              <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.196-2.12L17 20zM9 12a4 4 0 100-8 4 4 0 000 8zm8 0a4 4 0 100-8 4 4 0 000 8zM9 20h8v-2a3 3 0 00-3-3H9v5z" />
+                                </svg>
+                                Assigned Contact Person
+                              </h4>
+                              <div className="space-y-3">
+                                {booking.assigned_staff.map((staff) => (
+                                  <div key={staff.id} className="bg-green-50 rounded-lg p-4 border border-green-200">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                      <div className="flex justify-between">
+                                        <span className="text-gray-600">Contact Person:</span>
+                                        <span className="font-medium text-green-700">{staff.staff_name}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-gray-600">Role:</span>
+                                        <span className="font-medium capitalize">{staff.role}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-gray-600">Assignment Type:</span>
+                                        <span className="font-medium capitalize">{staff.assignment_type.replace('_', ' ')}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-gray-600">Assigned:</span>
+                                        <span className="font-medium">
+                                          {format(new Date(staff.assigned_at), 'MMM dd, yyyy HH:mm')}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
                           )}
 

@@ -1,11 +1,10 @@
-import json
 import logging
 import os
 import uuid
 import hashlib
 import httpx
 import asyncio
-from fastapi import FastAPI, HTTPException, Depends, Security, APIRouter, Request, Query
+from fastapi import FastAPI, HTTPException, Security, APIRouter, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 from datetime import date, datetime
@@ -74,9 +73,6 @@ def log_request_details(request: Request, token_data: TokenData, extra_info: dic
             log_message += " | " + " | ".join(extra_parts)
     
     logger.info(log_message)
-    
-    # Also log as JSON for structured logging tools
-    logger.debug(f"Request details: {json.dumps(log_data, default=str)}")
 
 def generate_confirmation_number() -> str:
     """Generate a unique confirmation number"""

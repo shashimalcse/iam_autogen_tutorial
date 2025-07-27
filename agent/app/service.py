@@ -41,7 +41,7 @@ from asgardeo_ai.models import AgentConfig
 from asgardeo.auth.models import ServerConfig, ClientConfig
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 load_dotenv()
@@ -169,8 +169,8 @@ async def run_background_agent_for_assignment(webhook_data: AutoAssignWebhook, t
         
         get_booking_admin_tool = SecureFunctionTool(
             get_booking_admin,
-            description="Get user's booking history to analyze past contact person assignments and preferences",
-            name="GetUserBookingsTool",
+            description="Get the booking information by booking ID",
+            name="GetBookingByIdTool",
             auth=AuthSchema(background_auth_manager, AuthConfig(
                 scopes=["admin_read_bookings"],
                 token_type=OAuthTokenType.AGENT_TOKEN,
@@ -206,14 +206,20 @@ async def run_background_agent_for_assignment(webhook_data: AutoAssignWebhook, t
             model_client=model_client,
             tools=[
                 get_booking_admin_tool,
+                get_available_staff_tool,
                 update_booking_tool,
-                get_available_staff_tool
             ],
             reflect_on_tool_use=True,
-            system_message=admin_agent_system_prompt
+            system_message=admin_agent_system_prompt,
+            max_tool_iterations=20,
             )
 
-        response = await assignment_agent.run(task=f"Assign contact person id 1 for booking id : {webhook_data.booking_id}")
+        response = await asyncio.wait_for(
+            assignment_agent.run(
+                task=f"Assign contact person for booking id : {webhook_data.booking_id} , hotel id : {webhook_data.hotel_id}"
+            ),
+            timeout=300  # 5 minutes timeout
+        )
 
         print(response.messages)
         print(f"Final Response: {response.messages[-1].content}")
