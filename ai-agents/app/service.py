@@ -92,8 +92,6 @@ azure_openai_endpoint = os.environ.get('AZURE_OPENAI_ENDPOINT')
 deployment_name = os.environ.get('AZURE_OPENAI_DEPLOYMENT_NAME')
 azure_openai_api_version = os.environ.get('AZURE_OPENAI_API_VERSION')
 
-google_api_key = os.environ.get('GOOGLE_API_KEY')
-
 app = FastAPI()
 
 
@@ -407,8 +405,11 @@ async def callback(
         logger.error(f"Error in callback: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+from app.dependencies import validate_token, TokenData
+from fastapi import Security
+
 @app.post("/webhook/auto-assign")
-async def auto_assign_webhook(webhook_data: AutoAssignWebhook):
+async def auto_assign_webhook(webhook_data: AutoAssignWebhook, token_data: TokenData = Security(validate_token, scopes=["webhook:auto_assign"])):
     """Webhook endpoint to receive auto-assignment requests from the booking API"""
     try:
         # Check if background agent is enabled

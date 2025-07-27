@@ -114,11 +114,11 @@ fi
 LOG_DIR="./logs"
 mkdir -p $LOG_DIR
 
-# Install and start API service
-print_status "Setting up API service..."
-cd api
+# Install and start Backend service
+print_status "Setting up Backend service..."
+cd backend
 if [ ! -d "venv" ]; then
-    print_status "Creating virtual environment for API..."
+    print_status "Creating virtual environment for Backend..."
     python3 -m venv venv
 fi
 
@@ -135,17 +135,17 @@ pip install poetry
 print_status "Installing Python dependencies..."
 pip install -r requirements.txt
 
-print_status "Starting API service on port 8001..."
+print_status "Starting Backend service on port 8001..."
 export PYTHONPATH=$(pwd)
-nohup uvicorn app.main:app --reload --host 0.0.0.0 --port 8001 > ../logs/api.log 2>&1 &
+nohup uvicorn app.main:app --reload --host 0.0.0.0 --port 8001 > ../logs/backend.log 2>&1 &
 API_PID=$!
-echo $API_PID > ../logs/api.pid
+echo $API_PID > ../logs/backend.pid
 deactivate
 cd ..
 
 # Install and start Agent service
 print_status "Setting up Agent service..."
-cd agent
+cd ai-
 if [ ! -d "venv" ]; then
     print_status "Creating virtual environment for Agent..."
     python3 -m venv venv
