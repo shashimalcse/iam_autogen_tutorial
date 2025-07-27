@@ -14,8 +14,9 @@ import os
 import httpx
 import logging
 from typing import Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime
 import asyncio
+from .jwt_client import jwt_client
 
 logger = logging.getLogger(__name__)
 
@@ -24,64 +25,17 @@ class AsgardeoSCIMService:
     
     def __init__(self):
         self.base_url = os.getenv('ASGARDEO_SCIM_BASE_URL', 'https://dev.api.asgardeo.io/t/myagents')
-        self.client_id = os.getenv('ASGARDEO_SCIM_CLIENT_ID')
-        self.client_secret = os.getenv('ASGARDEO_SCIM_CLIENT_SECRET')
-        self.token_endpoint = os.getenv('ASGARDEO_TOKEN_ENDPOINT', 'https://dev.api.asgardeo.io/t/myagents/oauth2/token')
-        
-        # Token caching
-        self._access_token = None
-        self._token_expires_at = None
-        self._token_lock = asyncio.Lock()
+        self.scim_scope = 'internal_user_mgt_view'
         
         # Data caching - configurable TTL in seconds (default 30 minutes)
         self._cache_ttl = int(os.getenv('SCIM_CACHE_TTL', '1800'))  # 30 minutes
         self._user_cache: Dict[str, Dict[str, Any]] = {}
         self._agent_cache: Dict[str, Dict[str, Any]] = {}
         self._cache_lock = asyncio.Lock()
-        
-        if not all([self.client_id, self.client_secret]):
-            logger.warning("Asgardeo SCIM credentials not configured. User/Agent info will not be available.")
     
     async def _get_access_token(self) -> Optional[str]:
-        """Get access token using client credentials grant"""
-        async with self._token_lock:
-            # Check if we have a valid cached token
-            if (self._access_token and 
-                self._token_expires_at and 
-                datetime.now() < self._token_expires_at):
-                return self._access_token
-            
-            if not all([self.client_id, self.client_secret]):
-                logger.error("Missing SCIM API credentials")
-                return None
-            
-            try:
-                async with httpx.AsyncClient() as client:
-                    response = await client.post(
-                        self.token_endpoint,
-                        headers={'Content-Type': 'application/x-www-form-urlencoded'},
-                        data={
-                            'grant_type': 'client_credentials',
-                            'client_id': self.client_id,
-                            'client_secret': self.client_secret,
-                            'scope': 'internal_user_mgt_view'
-                        }
-                    )
-                    response.raise_for_status()
-                    
-                    token_data = response.json()
-                    self._access_token = token_data.get('access_token')
-                    expires_in = token_data.get('expires_in', 3600)  # Default 1 hour
-                    
-                    # Set expiration with 5-minute buffer
-                    self._token_expires_at = datetime.now() + timedelta(seconds=expires_in - 300)
-                    
-                    logger.info("Successfully obtained SCIM access token")
-                    return self._access_token
-                    
-            except Exception as e:
-                logger.error(f"Failed to get SCIM access token: {str(e)}")
-                return None
+        """Get access token using shared JWT client"""
+        return await jwt_client.get_access_token(self.scim_scope)
     
     def _is_cache_valid(self, cached_item: Dict[str, Any]) -> bool:
         """Check if cached item is still valid"""
