@@ -66,7 +66,7 @@ const ChatComponent: React.FC = () => {
     }
 
     // WebSocket URL for AI agent backend
-    const wsUrl = `ws://localhost:8000/chat?session_id=${sessionId.current}`;
+    const wsUrl = `${process.env.REACT_APP_WS_URL}/chat?session_id=${sessionId.current}`;
     ws.current = new WebSocket(wsUrl);
 
     ws.current.onopen = () => {
@@ -404,7 +404,7 @@ const ChatComponent: React.FC = () => {
                 {pendingAuth && (
                   <div className="bg-white border border-gray-200 rounded-lg p-4">
                     <h4 className="font-semibold mb-2 text-sm text-gray-900">Approval needed!</h4>
-                    <p className="text-gray-600 mb-3 text-sm">Please approve to complete your booking.</p>
+                    <p className="text-gray-600 mb-3 text-sm">To complete your hotel booking, please approve and login to your account.</p>
                     {pendingAuth.context && (
                       <div className="mb-3 text-sm bg-gray-50 p-2 rounded-lg">
                         <strong className="text-gray-900">Booking Details:</strong>
