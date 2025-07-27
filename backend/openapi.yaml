@@ -953,7 +953,7 @@ paths:
   /api/admin/bookings/{booking_id}:
     get:
       summary: Get booking details
-      operationId: getBooking
+      operationId: getBookingAdmin
       security:
         - BearerAuth: [admin_read_bookings]
       parameters:
