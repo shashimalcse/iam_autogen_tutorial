@@ -310,7 +310,7 @@ const BookingsPage: React.FC = () => {
                                       Contact person not assigned yet
                                     </p>
                                     <p className="text-sm text-orange-700 mt-1">
-                                      A dedicated contact person will be assigned to your booking shortly. You'll be notified once the assignment is complete.
+                                      A dedicated contact person will be assigned to your booking shortly.
                                     </p>
                                   </div>
                                 </div>

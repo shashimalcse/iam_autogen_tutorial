@@ -61,6 +61,7 @@ agent_secret = os.environ.get('AGENT_SECRET')
 background_agent_id = os.environ.get('BACKGROUND_AGENT_ID')
 background_agent_name = os.environ.get('BACKGROUND_AGENT_NAME')
 background_agent_secret = os.environ.get('BACKGROUND_AGENT_SECRET')
+background_agent_enabled = os.environ.get('BACKGROUND_AGENT_ENABLED', 'false').lower() == 'true'
 
 server_config = ServerConfig(
     base_url=base_url
@@ -410,6 +411,16 @@ async def callback(
 async def auto_assign_webhook(webhook_data: AutoAssignWebhook):
     """Webhook endpoint to receive auto-assignment requests from the booking API"""
     try:
+        # Check if background agent is enabled
+        if not background_agent_enabled:
+            logger.info(f"Background agent is disabled. Skipping auto-assignment for booking {webhook_data.booking_id}")
+            return WebhookResponse(
+                task_id="disabled",
+                status="disabled",
+                message="Background agent auto-assignment is disabled",
+                estimated_completion=""
+            )
+        
         # Validate event type
         if webhook_data.event_type != "booking.auto_assign_requested":
             raise HTTPException(status_code=400, detail="Invalid event type")
