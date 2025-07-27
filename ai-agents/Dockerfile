@@ -40,18 +40,18 @@ RUN pip install --force-reinstall --no-cache-dir --no-deps /tmp/python-sdk/packa
 
 WORKDIR /app
 
+RUN addgroup -g 10014 choreo && \
+    adduser  --disabled-password  --no-create-home --uid 10014 --ingroup choreo choreouser
+
+
 # Install remaining requirements
 RUN pip install -r requirements.txt
 
 # Copy project files
 COPY . .
 
-# Create a new user with UID 10016
-RUN addgroup -g 10016 choreo && \
-    adduser  --disabled-password  --no-create-home --uid 10016 --ingroup choreo choreouser
-
 # Switch to the new user
-USER 10016
+USER 10014
 
 # Expose port (change if needed)
 EXPOSE 8000
