@@ -145,7 +145,7 @@ cd ..
 
 # Install and start Agent service
 print_status "Setting up Agent service..."
-cd ai-
+cd ai-agents
 if [ ! -d "venv" ]; then
     print_status "Creating virtual environment for Agent..."
     python3 -m venv venv
@@ -180,8 +180,8 @@ poetry build
 # Install both packages
 pip install --force-reinstall --no-deps /tmp/python-sdk/packages/asgardeo/dist/*.whl /tmp/python-sdk/packages/asgardeo-ai/dist/*.whl
 
-# Return to agent directory (script is in project root)
-cd "$SCRIPT_DIR/agent"
+# Return to ai-agents directory (script is in project root)
+cd "$SCRIPT_DIR/ai-agents"
 
 # Install remaining requirements
 pip install -r requirements.txt

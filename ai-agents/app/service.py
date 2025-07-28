@@ -292,7 +292,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         description="Books the hotel room selected by the user",
         name="BookHotelTool",
         auth=AuthSchema(auth_manager, AuthConfig(
-            scopes=["create_bookings", "openid", "profile"],
+            scopes=["create_bookings"],
             token_type=OAuthTokenType.OBO_TOKEN,
             resource="booking_api"
         ))
