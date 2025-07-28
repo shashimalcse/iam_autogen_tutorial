@@ -216,42 +216,6 @@ const BookingsPage: React.FC = () => {
                               </div>
                             </div>
                           </div>
-                          
-                          {/* Agent Information - Only show for agent bookings */}
-                          {booking.created_by === 'agent' && booking.agent_info && (
-                            <div className="pt-4 border-t border-gray-100">
-                              <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                                <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                </svg>
-                                Agent Information
-                              </h4>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                                <div className="flex justify-between">
-                                  <span className="text-gray-600">Agent Name:</span>
-                                  <span className="font-medium text-blue-600">{booking.agent_info.display_name || 'N/A'}</span>
-                                </div>
-                                {booking.agent_info.ai_model && (
-                                  <div className="flex justify-between">
-                                    <span className="text-gray-600">AI Model:</span>
-                                    <span className="font-medium">{booking.agent_info.ai_model}</span>
-                                  </div>
-                                )}
-                                {booking.agent_info.source && (
-                                  <div className="flex justify-between">
-                                    <span className="text-gray-600">Source:</span>
-                                    <span className="font-medium capitalize">{booking.agent_info.source.replace('_', ' ')}</span>
-                                  </div>
-                                )}
-                              </div>
-                              {booking.agent_info.description && (
-                                <div className="mt-3">
-                                  <span className="text-gray-600 text-sm">Description:</span>
-                                  <p className="text-sm text-gray-800 mt-1 italic">{booking.agent_info.description}</p>
-                                </div>
-                              )}
-                            </div>
-                          )}
 
                           {/* Assigned Staff Information */}
                           {booking.assigned_staff && booking.assigned_staff.length > 0 && (
@@ -319,7 +283,7 @@ const BookingsPage: React.FC = () => {
                           )}
 
                           {/* Contact Information */}
-                          <div className="pt-4 border-t border-gray-100">
+                          {/* <div className="pt-4 border-t border-gray-100">
                             <h4 className="font-semibold text-gray-900 mb-3">Contact Information</h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                               <div className="flex justify-between">
@@ -343,20 +307,20 @@ const BookingsPage: React.FC = () => {
                                 </div>
                               )}
                             </div>
-                          </div>
+                          </div> */}
 
                           {/* Payment Information */}
                           <div className="pt-4 border-t border-gray-100">
                             <h4 className="font-semibold text-gray-900 mb-3">Payment Details</h4>
                             <div className="bg-gray-50 rounded-lg p-4">
                               <div className="flex justify-between items-center">
-                                <span className="text-lg font-semibold text-gray-900">Total Amount Paid:</span>
+                                <span className="text-lg font-semibold text-gray-900">Total Amount:</span>
                                 <span className="text-2xl font-bold text-blue-600">
                                   ${booking.total_amount?.toLocaleString()}
                                 </span>
                               </div>
                               <div className="mt-2 text-sm text-gray-600">
-                                Booking confirmed and payment processed
+                                Booking confirmed and payment needs to be completed.
                               </div>
                             </div>
                           </div>
